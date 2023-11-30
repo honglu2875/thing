@@ -1,0 +1,59 @@
+syntax = "proto3";
+package thing;
+
+enum DTYPE {
+  INT8 = 0;  // np.int8
+  INT16 = 1;  // np.int16
+  INT32 = 2;  // np.int32
+  INT64 = 3;  // np.int64
+  UINT8 = 4;  // np.uint8
+  UINT16 = 5;  // np.uint16
+  UINT32 = 6;  // np.uint32
+  UINT64 = 7;  // np.uint64
+  FLOAT16 = 8;  // np.float16
+  FLOAT32 = 9;  // np.float32
+  FLOAT64 = 10;  // np.float64
+  BOOL = 11;  // built-in bool
+}
+
+enum FRAMEWORK {
+  NUMPY = 0;
+  TORCH = 1;
+  JAX = 2;
+}
+
+enum STATUS {
+    SUCCESS = 0;
+    FAILURE = 1;
+}
+
+message CatchArrayRequest {
+  // Send a serialized array of bytes
+  int64 id = 1;  // Unique identifier of this array
+  repeated int64 shape = 2;
+  optional string var_name = 3;  // Variable name
+  DTYPE dtype = 4;
+  FRAMEWORK framework = 5;
+  bytes data = 6;
+  optional uint32 chunk_id = 7;  // If sending in chunks, the chunk_id goes as 0, 1, 2, ...
+  uint32 num_chunks = 8;  // total number of chunks
+}
+
+message CatchByteRequest {
+  // Send byte information without metadata
+  // (Currently only for debugging. Maybe use it to allow for pickled objects in the future.)
+  bytes data = 1;
+}
+
+message HealthCheckRequest {
+}
+
+message Response {
+  STATUS status = 1;
+}
+
+service Thing {
+  rpc CatchArray (CatchArrayRequest) returns (Response);
+  rpc CatchByte (CatchByteRequest) returns (Response);
+  rpc HealthCheck (HealthCheckRequest) returns (Response);
+}

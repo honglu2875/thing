@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm[toml]>=7"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools_scm]
+
+[project]
+name = "thing"
+description = ""
+authors = [{name = "Honglu Fan"}]
+readme = "README.md"
+requires-python = ">=3.10"
+version = "0.0.0"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "jax",
+    "jaxlib",
+    "torch"
+]
