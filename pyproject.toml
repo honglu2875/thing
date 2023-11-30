@@ -17,6 +17,7 @@ version = "0.0.0"
 
 [project.optional-dependencies]
 dev = [
+    "grpcio-tools",
     "pytest",
     "jax",
     "jaxlib",
