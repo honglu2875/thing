@@ -1,18 +1,11 @@
-import multiprocessing
-
 import jax.numpy as jnp
 import numpy as np
 import torch
 
 import thing
 
-_lock = multiprocessing.Lock()
-
 
 def test_transmission():
-    global _lock
-    _lock.acquire()
-
     objects = []
     for dtype in [
         np.float16,
@@ -56,23 +49,16 @@ def test_transmission():
     ]:
         objects.append(jnp.array([1, 2, 3], dtype=dtype))
 
-    with thing.Server() as server:
+    with thing.Server(port=2875) as server:
         for obj in objects:
-            thing.catch(obj)
+            thing.catch(obj, server="localhost:2875")
             arr = server.get_array()
             assert (arr == obj).all()
 
-    _lock.release()
-
 
 def test_chunks():
-    global _lock
-    _lock.acquire()
-
     arr = np.random.rand(1000, 1000)  # default is float64
-    with thing.Server() as server:
-        thing.catch(arr)
+    with thing.Server(port=2876) as server:
+        thing.catch(arr, server="localhost:2876")
         res = server.get_array()
         assert (arr == res).all()
-
-    _lock.release()

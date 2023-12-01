@@ -1,6 +1,8 @@
+import logging
 import sys
 from concurrent import futures
 from queue import Queue
+from typing import Optional
 
 import grpc
 
@@ -9,7 +11,23 @@ from thing.utils import reconstruct_array
 
 
 class Server(thing_pb2_grpc.ThingServicer):
-    def __init__(self, port: int = 2875, max_size: int = 0, max_byte_per_item: int = 0):
+    """
+    The main class for receiving the data payloads from `thing.client`.
+    A few important notes:
+        - The instance is designed to be created using the `with` statement so that grpc server can be
+          opened and closed properly. I do not see a use case requiring multiple instances on the server,
+          so I would rather not to over-engineer it.
+        - The queue in the server is thread-safe. But the queue will not respect the order (as separate
+          chunks of payload can arrive in any order)
+    """
+
+    def __init__(
+        self,
+        port: int = 2875,
+        max_size: int = 0,
+        max_byte_per_item: int = 0,
+        logger: Optional[logging.Logger] = None,
+    ):
         """
         Args:
             max_size: the maximum size of the queue. 0 if the queue is unbounded.
@@ -19,6 +37,7 @@ class Server(thing_pb2_grpc.ThingServicer):
         self.port = port
         self.max_size = max_size
         self.max_byte_per_item = max_byte_per_item
+        self.logger = logger or logging.getLogger(__name__)
         self._byte_queue = Queue(max_size)
         self._array_queue = Queue(max_size)
 
@@ -37,7 +56,7 @@ class Server(thing_pb2_grpc.ThingServicer):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._blocked = True
         if self._server is not None:
-            self._server.stop(None)
+            self._server.stop(0)
 
     def _check_valid(self, request):
         if self._blocked:
@@ -69,9 +88,9 @@ class Server(thing_pb2_grpc.ThingServicer):
     def get_byte(self):
         return self._byte_queue.get()
 
-    def get_array(self):
+    def get_array(self, timeout: float = 5.0):
         while True:
-            array_payload = self._array_queue.get()
+            array_payload = self._array_queue.get(timeout=timeout)
             incomplete_chunks = self._incomplete_chunks.get(array_payload.id, [])
             incomplete_chunks.append(array_payload)
 
