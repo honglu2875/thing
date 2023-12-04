@@ -46,7 +46,7 @@ class ThingClient:
         server_addr: str,
         server_port: str | int,
         logger: Optional[logging.Logger] = None,
-        chunk_size: int = 32 * 1024,
+        chunk_size: int = 128 * 1024,
     ):
         self._server_addr = server_addr
         self._server_port = str(server_port)
@@ -82,13 +82,17 @@ class ThingClient:
         _stub = thing_pb2_grpc.ThingStub(_channel)
         yield _stub
 
-    def _catch_numpy(
+    def _catch(
         self,
-        array,
+        array: np.ndarray,
         var_name: Optional[str] = None,
-        framework=thing_pb2.FRAMEWORK.NUMPY,
         server: Optional[str] = None,
+        framework=thing_pb2.FRAMEWORK.NUMPY,
     ) -> bool:
+        """
+        The core of array catching. It only receives a numpy array (already converted from torch or jax),
+        and sends it to the server in bytes and in chunks without creating copies.
+        """
         with self._id_lock:  # avoid clashing ids
             id = self._id_counter
             self._id_counter += 1
@@ -136,7 +140,7 @@ class ThingClient:
     ) -> bool:
         # We have to unfortunately detach and offload the array to CPU which may cause a sync
         array = array.detach().cpu().numpy(force=False)  # force=False to avoid a copy
-        return self._catch_numpy(
+        return self._catch(
             array, var_name=var_name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
         )
 
@@ -144,8 +148,15 @@ class ThingClient:
         self, array, var_name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         array = np.array(array, copy=False)
-        return self._catch_numpy(
+        return self._catch(
             array, var_name=var_name, framework=thing_pb2.FRAMEWORK.JAX, server=server
+        )
+
+    def _catch_numpy(
+        self, array, var_name: Optional[str] = None, server: Optional[str] = None
+    ) -> bool:
+        return self._catch(
+            array, var_name=var_name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
         )
 
     def catch(
@@ -159,6 +170,8 @@ class ThingClient:
                 - a torch tensor
                 - a jax array
                 We however do not import any of these libraries to avoid overhead.
+            var_name: the name of the variable. If not provided, it will be None.
+                In the case of None, the logger will refer to it as "<noname>".
             server: a custom server address and port if different from default.
                 Must be in the form of "[address]:[port]".
         Returns:

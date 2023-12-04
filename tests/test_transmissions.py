@@ -3,6 +3,7 @@ import numpy as np
 import torch
 
 import thing
+from thing.servicer import Servicer
 
 
 def test_transmission():
@@ -49,7 +50,7 @@ def test_transmission():
     ]:
         objects.append(jnp.array([1, 2, 3], dtype=dtype))
 
-    with thing.Server(port=2875) as server:
+    with Servicer(port=2875) as server:
         for obj in objects:
             thing.catch(obj, server="localhost:2875")
             arr = server.get_array()
@@ -58,7 +59,7 @@ def test_transmission():
 
 def test_chunks():
     arr = np.random.rand(1000, 1000)  # default is float64
-    with thing.Server(port=2876) as server:
+    with Servicer(port=2876) as server:
         thing.catch(arr, server="localhost:2876")
         res = server.get_array()
         assert (arr == res).all()

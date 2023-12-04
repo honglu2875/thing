@@ -1,3 +1,4 @@
 grpcio
 asyncio
 numpy
+rich
