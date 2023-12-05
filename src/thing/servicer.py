@@ -13,6 +13,7 @@
 # limitations under the License.
 import logging
 import sys
+import time
 from concurrent import futures
 from queue import Queue
 from typing import Optional
@@ -20,7 +21,8 @@ from typing import Optional
 import grpc
 
 from thing import thing_pb2, thing_pb2_grpc
-from thing.utils import reconstruct_array
+from thing.type import TensorObject
+from thing.utils import reconstruct_tensor_object
 
 
 class Servicer(thing_pb2_grpc.ThingServicer):
@@ -54,6 +56,11 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         self._array_queue = Queue(max_size)
 
         self._incomplete_chunks = {}  # save incomplete chunks of arrays
+
+        self._id_to_client_addr = {}  # save the client address for each array id
+        self._id_to_timestamp = (
+            {}
+        )  # save the timestamp of the latest chunk for each array id
 
         self._server = None  # the gRPC server instance
         self._blocked = False
@@ -99,6 +106,24 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         if not self._check_valid(request):
             return thing_pb2.Response(status=thing_pb2.STATUS.FAILURE)
 
+        if request.id is None:
+            self.logger.warning("Received an array without an id. Ignoring.")
+            return thing_pb2.Response(status=thing_pb2.STATUS.FAILURE)
+
+        if (
+            request.id in self._id_to_client_addr
+            and self._id_to_client_addr[request.id] != context.peer()
+        ):
+            self.logger.warning(
+                f"Received an array with id {request.id} from a different client. Ignoring."
+            )
+            return thing_pb2.Response(status=thing_pb2.STATUS.FAILURE)
+
+        if request.id not in self._id_to_client_addr:
+            self._id_to_client_addr[request.id] = context.peer()
+
+        self._id_to_timestamp[request.id] = time.time()
+
         self._array_queue.put(request)
         return thing_pb2.Response(status=thing_pb2.STATUS.SUCCESS)
 
@@ -108,18 +133,24 @@ class Servicer(thing_pb2_grpc.ThingServicer):
     def get_byte(self):
         return self._byte_queue.get()
 
-    def get_array(self, timeout: float = 5.0):
+    def get_tensor(self, timeout: float = 5.0) -> TensorObject:
+        # Keep getting chunks until we received the first complete payload.
+        # Incomplete payloads keep getting saved in `self._incomplete_chunks`.
         while True:
             array_payload = self._array_queue.get(timeout=timeout)
-            incomplete_chunks = self._incomplete_chunks.get(array_payload.id, [])
-            incomplete_chunks.append(array_payload)
+            current_chunks = self._incomplete_chunks.get(array_payload.id, [])
+            current_chunks.append(array_payload)
 
-            if array_payload.num_chunks > len(incomplete_chunks):
-                self._incomplete_chunks[array_payload.id] = incomplete_chunks
+            if array_payload.num_chunks > len(current_chunks):
+                self._incomplete_chunks[array_payload.id] = current_chunks
                 continue
             break
 
         if array_payload.id in self._incomplete_chunks:
             del self._incomplete_chunks[array_payload.id]
 
-        return reconstruct_array(incomplete_chunks)
+        return reconstruct_tensor_object(
+            current_chunks,
+            client_addr=self._id_to_client_addr.get(array_payload.id, "unknown"),
+            timestamp=self._id_to_timestamp.get(array_payload.id, 0),
+        )

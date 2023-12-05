@@ -32,7 +32,7 @@ class ThingClient:
     as possible to retrieve those live tensors for you.
     A few important notes:
       - On the first call of `catch`, a health-check message will be sent. If unavailable,
-        the functionality will become permanent no-op for the life-cycle of the client object.
+        the functionality will become permanently disabled for the life-cycle of the client object.
         This design is to protect the cases when you still have these debugging codes with `catch`
         but do not intend to spin up a server.
       - The rpc channel and stub are created and destroyed on each call of `catch`. I am not aware
@@ -94,7 +94,7 @@ class ThingClient:
         and sends it to the server in bytes and in chunks without creating copies.
         """
         with self._id_lock:  # avoid clashing ids
-            id = self._id_counter
+            idx = self._id_counter
             self._id_counter += 1
 
         if array.dtype.name in _numpy_dtypes:
@@ -116,7 +116,7 @@ class ThingClient:
                     )
                     response = stub.CatchArray(
                         thing_pb2.CatchArrayRequest(
-                            id=id,
+                            id=idx,
                             var_name=var_name,
                             shape=array.shape,
                             dtype=dtype,

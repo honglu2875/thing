@@ -19,6 +19,7 @@ from typing import Optional
 import numpy as np
 
 from thing import thing_pb2
+from thing.type import TensorObject
 
 
 def _set_up_logger(name: str):
@@ -99,3 +100,14 @@ def reconstruct_array(chunks: list[thing_pb2.CatchArrayRequest]):
         arr = torch.tensor(arr)
 
     return arr
+
+
+def reconstruct_tensor_object(
+    chunks: list[thing_pb2.CatchArrayRequest],
+    client_addr: str = "unknown",
+    timestamp: int = 0,
+):
+    array = reconstruct_array(chunks)
+    return TensorObject.from_proto(
+        chunks[0], array, client_addr=client_addr, timestamp=timestamp
+    )

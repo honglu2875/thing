@@ -15,6 +15,7 @@ from typing import Optional
 
 from thing.argument import ServerArguments, ServicerArguments
 from thing.servicer import Servicer
+from thing.store import Store
 
 
 class Server:
@@ -32,8 +33,8 @@ class Server:
         servicer_args = ServicerArguments.from_args(servicer_args, kwargs)
         self.servicer = Servicer(**servicer_args)
 
-        server_args = ServerArguments.from_args(server_args, kwargs)
-        # todo: finish this
+        self.server_args = ServerArguments.from_args(server_args, kwargs)
+        self.store = Store()
         ...
 
     def start(self):

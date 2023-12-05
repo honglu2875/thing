@@ -53,7 +53,7 @@ def test_transmission():
     with Servicer(port=2875) as server:
         for obj in objects:
             thing.catch(obj, server="localhost:2875")
-            arr = server.get_array()
+            arr = server.get_tensor().data
             assert (arr == obj).all()
 
 
@@ -61,5 +61,5 @@ def test_chunks():
     arr = np.random.rand(1000, 1000)  # default is float64
     with Servicer(port=2876) as server:
         thing.catch(arr, server="localhost:2876")
-        res = server.get_array()
+        res = server.get_tensor().data
         assert (arr == res).all()
