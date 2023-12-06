@@ -33,6 +33,7 @@ catch = client.catch
 
 # Server API
 server: Optional[Server] = None
+_get_note_displayed: bool = False
 
 
 def serve():
@@ -104,6 +105,7 @@ def get(item: Union[int, str], index: int = 0):
     Command-line frontend for getting tensors by either its name or its id.
     """
     global server
+    global _get_note_displayed
 
     if server is None:
         rich.print("Server is not running.")
@@ -113,10 +115,12 @@ def get(item: Union[int, str], index: int = 0):
         return server.store.get_tensor_by_id(item)
     elif isinstance(item, str):
         hist_len = server.store.get_len(item)
-        if hist_len > 1:
-            rich.print("Note:")
-            rich.print(f"  There are {hist_len} tensors with the same name `{item}`.")
-            rich.print(f"  To get the i-th latest version, use `.get(name, i)`.")
+        if not _get_note_displayed:
+            if hist_len > 1:
+                rich.print("Note:")
+                rich.print(f"  There are {hist_len} tensors with the same name `{item}`.")
+                rich.print(f"  To get the i-th latest version, use `.get(name, i)`.")
+        _get_note_displayed = True
         return server.store.get_tensor_by_name(item, index)
     else:
         raise TypeError(f"The argument must be either a string or an int, got {type(item)}.")

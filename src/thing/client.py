@@ -16,6 +16,7 @@ import ctypes
 import logging
 import os
 import threading
+from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Optional
 
@@ -59,6 +60,8 @@ class ThingClient:
         self._thread_pool = ThreadPoolExecutor()
         self._id_counter = 0
         self._id_lock = threading.Lock()
+
+        self._every_counter = defaultdict(lambda: 0)  # implement `.catch(..., every=k)` by keeping track of the counter
 
     def _test_server(self) -> bool:
         with self._set_channel_stub() as stub:
@@ -165,7 +168,7 @@ class ThingClient:
         )
 
     def catch(
-        self, array, name: Optional[str] = None, server: Optional[str] = None
+        self, array, name: Optional[str] = None, server: Optional[str] = None, every: int = 1
     ) -> Optional[Future]:
         """
         Catch an array.
@@ -179,6 +182,8 @@ class ThingClient:
                 In the case of None, the logger will refer to it as "<noname>".
             server: a custom server address and port if different from default.
                 Must be in the form of "[address]:[port]".
+            every: catch every `every`-th array. The array MUST have a name, or
+                it will be ignored.
         Returns:
             The future object for the request. It will be up to the user to
             decide whether to block on the future or not.
@@ -192,6 +197,11 @@ class ThingClient:
 
         if not self.server_available and not server:
             return None
+
+        if name is not None and every > 1:
+            self._every_counter[name] += 1
+            if self._every_counter[name] % every != 0:
+                return None
 
         # Sacrifice a little type-check robustness to avoid unnecessary imports
         if (
