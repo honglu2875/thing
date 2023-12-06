@@ -1,9 +1,11 @@
 import logging
 import os
 import time
+from collections import OrderedDict
 from datetime import datetime
 from typing import Optional, Union
 
+import rich
 from rich.console import Console
 
 from .argument import ServicerArguments
@@ -97,32 +99,61 @@ def status():
             pass
 
 
-def get(item: Union[int, str]):
+def get(item: Union[int, str], index: int = 0):
     """
     Command-line frontend for getting tensors by either its name or its id.
     """
     global server
 
     if server is None:
-        return "Server is not running."
+        rich.print("Server is not running.")
+        return None
 
     if isinstance(item, int):
-        try:
-            return server.store.get_tensor_by_id(item)
-        except KeyError:
-            return f"Item with id {item} does not exist."
+        return server.store.get_tensor_by_id(item)
     elif isinstance(item, str):
-        try:
-            return server.store.get_tensor_by_name(item)
-        except KeyError:
-            return f"Item with name {item} does not exist."
+        hist_len = server.store.get_len(item)
+        if hist_len > 1:
+            rich.print("Note:")
+            rich.print(f"  There are {hist_len} tensors with the same name `{item}`.")
+            rich.print(f"  To get the i-th latest version, use `.get(name, i)`.")
+        return server.store.get_tensor_by_name(item, index)
     else:
         raise TypeError(f"The argument must be either a string or an int, got {type(item)}.")
 
 
 def summary():
-    ...
-    # TODO
+    global server
+
+    if server is None:
+        rich.print("Server is not running.")
+        return None
+
+    _received_tensors = OrderedDict()
+    _received_noname_tensors = OrderedDict()
+    _NUM_LOGS = 10
+    # Scan _NUM_LOGS logs and write a summary
+    for i, log in enumerate(server.store.get_history()):
+        if i >= _NUM_LOGS:
+            break
+        if not log.name:
+            _received_noname_tensors[log.id] = server.store.by_id(log.id)
+        else:
+            _received_tensors[log.name] = server.store.by_name(log.name)
+
+    if _received_tensors:
+        rich.print("Received tensors:")
+        for name, tensor in _received_tensors.items():
+            hist_len = server.store.get_len(name)
+            if hist_len > 1:
+                rich.print(f"  {name}: {tensor.shape} (latest, total {hist_len})")
+            else:
+                rich.print(f"  {name}: {tensor.shape}")
+
+    if _received_noname_tensors:
+        rich.print("Received unnamed tensors:")
+        for idx, tensor in _received_noname_tensors.items():
+            rich.print(f"  id={idx}: {tensor.shape}")
 
 
 __all__ = [

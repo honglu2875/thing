@@ -43,12 +43,12 @@ class Store:
         for log in self._history[::-1]:
             yield log
 
-    def _by_id(self, idx: int) -> TensorObject:
+    def by_id(self, idx: int) -> TensorObject:
         if idx not in self._items:
             raise KeyError(f"Item with id {idx} does not exist.")
         return self._items[idx]
 
-    def _by_name(self, name: str, index: int = 0) -> TensorObject:
+    def by_name(self, name: str, index: int = 0) -> TensorObject:
         if not self._name_to_id[name]:
             raise KeyError(f"Item with name {name} does not exist.")
         return self._items[self._name_to_id[name][-(1 + index)]]
@@ -62,7 +62,7 @@ class Store:
         Returns:
             The corresponding tensor.
         """
-        return self._by_id(idx).data
+        return self.by_id(idx).data
 
     def get_tensor_by_name(self, name: str, index: int = 0):
         """
@@ -75,7 +75,7 @@ class Store:
         Returns:
             The corresponding tensor.
         """
-        return self._by_name(name, index).data
+        return self.by_name(name, index).data
 
     def get_all_by_name(self, name: str):
         """
@@ -90,6 +90,14 @@ class Store:
             raise KeyError(f"Item with name {name} does not exist.")
         return [self._items[idx].data for idx in self._name_to_id[name][::-1]]
 
+    def get_len(self, name: str):
+        """
+        Get the number of historical tensors received under the given name.
+        """
+        if not self._name_to_id[name]:
+            return 0
+        return len(self._name_to_id[name])
+
     def describe(self, item: Union[str, int]):
         """
         Command-line frontend for describing a tensor and its metadata.
@@ -100,9 +108,9 @@ class Store:
         import rich
 
         if isinstance(item, str):
-            obj = self._by_name(item)
+            obj = self.by_name(item)
         elif isinstance(item, int):
-            obj = self._by_id(item)
+            obj = self.by_id(item)
         else:
             raise TypeError(f"Unsupported type {type(item)}")
 
