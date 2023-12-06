@@ -46,9 +46,45 @@ thing.summary()
 ```
 to get an idea about the recent captures from clients.
 
-If you received the captures, do, for example,
+If you received the captures, try, for example,
 ```python
-thing.get('loss')
+thing.get('lm_head_weight')
 ```
 to obtain the captured tensor in your server session. It will not affect your training code and you can apply
 whatever transformation you want to investigate further.
+
+
+# FAQ
+- Q: Why not logging?
+
+  A: Logging is great for standardized metrics and quantities. But in the case of debugging and research, there is 
+  data (especially big tensors such as layer weights) that we prefer to interactively explore in a separate persistent
+  session.
+  Several examples of my own use cases:
+
+  - Debugging a model implementation. Quickly catching intermediate variables, keep them in a persistent python
+    session, check the shapes and do some sanity tests.
+  - Silently catch the hidden states in a continuous training/inference job for some quick analysis.
+  - Spin up a high-mem instance and receive model weights from an experimental training job. A small experiment can
+    easily generate terabytes of checkpoints, and I'd rather put them on RAM for quick studies rather than saving
+    to disk/pushing to blob storage.
+  
+- Q: Why not using pickle?
+
+  A: Tensors can be huge. I'd rather stream bytes directly from the original buffer address than doing serialization
+  and make a copy of the whole thing in RAM.
+
+- Q: What to do if the server receiving tensors is on a different machine?
+  
+  A: A few ways:
+
+  - `ssh` with reverse port-forwarding.
+  - Try to set the environment variable `THING_SERVER=<your-own-ip>`.
+  - In the client, specify `thing.catch(..., server='<your-ip>:<your-port>')`
+
+- Q: What's the point of naming in: `.catch(..., name='...')`?
+
+  A: A few points:
+  - A name is not supposed to be a unique identifier of a transmission.
+  - Several transmissions under the same name will have a chain of history on the server.
+  - `thing.get_all(name)` returns a list of tensors, from oldest to latest.

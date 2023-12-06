@@ -14,11 +14,12 @@
 import contextlib
 import ctypes
 import logging
-import os
+from numbers import Number
+import secrets
 import threading
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Optional
+from typing import Optional, Any
 
 import grpc
 import numpy as np
@@ -50,15 +51,16 @@ class ThingClient:
         server_port: str | int,
         logger: Optional[logging.Logger] = None,
         chunk_size: int = 128 * 1024,
+        logging_level: str = 'ERROR',
     ):
         self._server_addr = server_addr
         self._server_port = str(server_port)
         self._logger = logger or logging.getLogger(__name__)
+        self._logger.setLevel(logging_level)
         self._chunk_size = chunk_size
 
         self.server_available = None
         self._thread_pool = ThreadPoolExecutor()
-        self._id_counter = 0
         self._id_lock = threading.Lock()
 
         self._every_counter = defaultdict(lambda: 0)  # implement `.catch(..., every=k)` by keeping track of the counter
@@ -101,8 +103,7 @@ class ThingClient:
         and sends it to the server in bytes and in chunks without creating copies.
         """
         with self._id_lock:  # avoid clashing ids
-            idx = self._id_counter
-            self._id_counter += 1
+            idx = secrets.randbelow(2 ** 63 - 1)  # random int64
 
         if array.dtype.name in _numpy_dtypes:
             dtype = _numpy_dtypes[array.dtype.name]
@@ -168,7 +169,7 @@ class ThingClient:
         )
 
     def catch(
-        self, array, name: Optional[str] = None, server: Optional[str] = None, every: int = 1
+        self, array: Any, name: Optional[str] = None, server: Optional[str] = None, every: int = 1
     ) -> Optional[Future]:
         """
         Catch an array.
@@ -202,6 +203,10 @@ class ThingClient:
             self._every_counter[name] += 1
             if self._every_counter[name] % every != 0:
                 return None
+
+        # For scalars, default to numpy array with shape ()
+        if isinstance(array, Number):
+            array = np.array(array)
 
         # Sacrifice a little type-check robustness to avoid unnecessary imports
         if (

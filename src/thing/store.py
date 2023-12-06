@@ -80,6 +80,7 @@ class Store:
     def get_all_by_name(self, name: str):
         """
         Retrieve all tensors received under the given name.
+        Ordered from the oldest to the latest.
 
         Args:
             name: the name of the item.
@@ -88,7 +89,7 @@ class Store:
         """
         if not self._name_to_id[name]:
             raise KeyError(f"Item with name {name} does not exist.")
-        return [self._items[idx].data for idx in self._name_to_id[name][::-1]]
+        return [self._items[idx].data for idx in self._name_to_id[name]]
 
     def get_len(self, name: str):
         """
