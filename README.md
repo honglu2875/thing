@@ -11,7 +11,7 @@ Say, you have a neural network training script, and you just want to play with s
 python session, investigating the L2-norms, distributions, eigen-vectors, etc. in a live and interactive manner without
 disturbing your training job.
 
-You can insert client codes as follows:
+You can quickly modify your training code by inserting some `thing.catch(...)` as follows:
 ```python
 import thing
 import ... # your other imports
@@ -66,7 +66,7 @@ whatever transformation you want to investigate further.
     session, check the shapes and do some sanity tests.
   - Silently catch the hidden states in a continuous training/inference job for some quick analysis.
   - Spin up a high-mem instance and receive model weights from an experimental training job. A small experiment can
-    easily generate terabytes of checkpoints, and I'd rather put them on RAM for quick studies rather than saving
+    easily generate terabytes of checkpoints, and I'd rather put them on RAM for quick studies than saving
     to disk/pushing to blob storage.
   
 - Q: Why not using pickle?
@@ -84,7 +84,7 @@ whatever transformation you want to investigate further.
 
 - Q: What's the point of naming in: `.catch(..., name='...')`?
 
-  A: A few points:
+  A: A few things:
   - A name is not supposed to be a unique identifier of a transmission.
   - Several transmissions under the same name will have a chain of history on the server.
   - `thing.get_all(name)` returns a list of tensors, from oldest to latest.
