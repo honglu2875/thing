@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from rich.console import Console
 
@@ -28,7 +28,6 @@ server_url = os.environ.get("THING_SERVER", "localhost")
 port = os.environ.get("THING_PORT", 2875)
 client = Client(server_addr=server_url, server_port=port)
 catch = client.catch
-
 
 # Server API
 server: Optional[Server] = None
@@ -98,4 +97,35 @@ def status():
             pass
 
 
-__all__ = ["catch", "serve", "Server", "Client"]
+def get(item: Union[int, str]):
+    """
+    Command-line frontend for getting tensors by either its name or its id.
+    """
+    global server
+
+    if server is None:
+        return "Server is not running."
+
+    if isinstance(item, int):
+        try:
+            return server.store.get_tensor_by_id(item)
+        except KeyError:
+            return f"Item with id {item} does not exist."
+    elif isinstance(item, str):
+        try:
+            return server.store.get_tensor_by_name(item)
+        except KeyError:
+            return f"Item with name {item} does not exist."
+    else:
+        raise TypeError(f"The argument must be either a string or an int, got {type(item)}.")
+
+
+def summary():
+    ...
+    # TODO
+
+
+__all__ = [
+    "catch", "Client",
+    "serve", "status", "get", "summary", "Server",
+]
