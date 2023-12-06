@@ -50,16 +50,16 @@ def test_transmission():
     ]:
         objects.append(jnp.array([1, 2, 3], dtype=dtype))
 
-    with Servicer(port=2875) as server:
+    with Servicer(port=2876) as server:
         for obj in objects:
-            thing.catch(obj, server="localhost:2875")
+            thing.catch(obj, server="localhost:2876")
             arr = server.get_tensor().data
             assert (arr == obj).all()
 
 
 def test_chunks():
     arr = np.random.rand(1000, 1000)  # default is float64
-    with Servicer(port=2876) as server:
-        thing.catch(arr, server="localhost:2876")
+    with Servicer(port=2877) as server:
+        thing.catch(arr, server="localhost:2877")
         res = server.get_tensor().data
         assert (arr == res).all()

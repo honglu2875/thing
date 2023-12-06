@@ -41,6 +41,8 @@ class ThingClient:
         or just forget about it so that it runs asynchronously.
     """
 
+    _timeout: float = 5.0
+
     def __init__(
         self,
         server_addr: str,
@@ -62,7 +64,9 @@ class ThingClient:
         with self._set_channel_stub() as stub:
             server = self._server_addr + ":" + self._server_port
             try:
-                response = stub.HealthCheck(thing_pb2.HealthCheckRequest())
+                response = stub.HealthCheck(
+                    thing_pb2.HealthCheckRequest(), timeout=self._timeout
+                )
                 assert response.status == thing_pb2.STATUS.SUCCESS
                 self._logger.info(f"Server {server} is available.")
                 return True
@@ -85,7 +89,7 @@ class ThingClient:
     def _catch(
         self,
         array: np.ndarray,
-        var_name: Optional[str] = None,
+        name: Optional[str] = None,
         server: Optional[str] = None,
         framework=thing_pb2.FRAMEWORK.NUMPY,
     ) -> bool:
@@ -110,14 +114,14 @@ class ThingClient:
             with self._set_channel_stub(server) as stub:
                 for i in range(0, len(data), self._chunk_size):
                     self._logger.info(
-                        f"Sending tensor {var_name or '<noname>'} of shape {array.shape} and "
+                        f"Sending tensor {name or '<noname>'} of shape {array.shape} and "
                         f"type {array.dtype.name}. "
                         f"Chunk {i // self._chunk_size} of {len(data) // self._chunk_size}."
                     )
                     response = stub.CatchArray(
                         thing_pb2.CatchArrayRequest(
                             id=idx,
-                            var_name=var_name,
+                            var_name=name,
                             shape=array.shape,
                             dtype=dtype,
                             framework=framework,
@@ -125,7 +129,8 @@ class ThingClient:
                             chunk_id=i // self._chunk_size,
                             num_chunks=(len(data) + self._chunk_size - 1)
                             // self._chunk_size,
-                        )
+                        ),
+                        timeout=self._timeout,
                     )
                     if response.status != thing_pb2.STATUS.SUCCESS:
                         return False
@@ -136,31 +141,31 @@ class ThingClient:
         return True
 
     def _catch_torch(
-        self, array, var_name: Optional[str] = None, server: Optional[str] = None
+        self, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         # We have to unfortunately detach and offload the array to CPU which may cause a sync
         array = array.detach().cpu().numpy(force=False)  # force=False to avoid a copy
         return self._catch(
-            array, var_name=var_name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
+            array, name=name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
         )
 
     def _catch_jax(
-        self, array, var_name: Optional[str] = None, server: Optional[str] = None
+        self, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         array = np.array(array, copy=False)
         return self._catch(
-            array, var_name=var_name, framework=thing_pb2.FRAMEWORK.JAX, server=server
+            array, name=name, framework=thing_pb2.FRAMEWORK.JAX, server=server
         )
 
     def _catch_numpy(
-        self, array, var_name: Optional[str] = None, server: Optional[str] = None
+        self, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         return self._catch(
-            array, var_name=var_name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
+            array, name=name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
         )
 
     def catch(
-        self, array, var_name: Optional[str] = None, server: Optional[str] = None
+        self, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> Optional[Future]:
         """
         Catch an array.
@@ -170,7 +175,7 @@ class ThingClient:
                 - a torch tensor
                 - a jax array
                 We however do not import any of these libraries to avoid overhead.
-            var_name: the name of the variable. If not provided, it will be None.
+            name: the name of the variable. If not provided, it will be None.
                 In the case of None, the logger will refer to it as "<noname>".
             server: a custom server address and port if different from default.
                 Must be in the form of "[address]:[port]".
@@ -188,28 +193,24 @@ class ThingClient:
         if not self.server_available and not server:
             return None
 
-        # Sacrifice type-check robustness for performance
+        # Sacrifice a little type-check robustness to avoid unnecessary imports
         if (
             str(array.__class__) == "<class 'numpy.ndarray'>"
         ):  # Numpy array naming should be stable enough
-            future = self._thread_pool.submit(
-                self._catch_numpy, array, var_name=var_name, server=server
-            )
+            _fn = self._catch_numpy
         elif (
             str(array.__class__) == "<class 'torch.Tensor'>"
         ):  # Torch tensor naming should be stable enough
-            future = self._thread_pool.submit(
-                self._catch_torch, array, var_name=var_name, server=server
-            )
+            _fn = self._catch_torch
         elif "ArrayImpl" in str(
             array.__class__
         ):  # May not be robust since JAX makes changes frequently
-            future = self._thread_pool.submit(
-                self._catch_jax, array, var_name=var_name, server=server
-            )
+            _fn = self._catch_jax
         else:
             self._logger.error(f"Unsupported array type {array.__class__}")
             return None
+
+        future = self._thread_pool.submit(_fn, array, name=name, server=server)
 
         return future
 

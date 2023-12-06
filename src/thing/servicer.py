@@ -24,6 +24,8 @@ from thing import thing_pb2, thing_pb2_grpc
 from thing.type import TensorObject
 from thing.utils import reconstruct_tensor_object
 
+_exit = object()  # a sentinel object to indicate the end of the queue
+
 
 class Servicer(thing_pb2_grpc.ThingServicer):
     """
@@ -58,9 +60,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         self._incomplete_chunks = {}  # save incomplete chunks of arrays
 
         self._id_to_client_addr = {}  # save the client address for each array id
-        self._id_to_timestamp = (
-            {}
-        )  # save the timestamp of the latest chunk for each array id
+        self._id_to_timestamp = {}  # save the timestamp of the latest chunk for each id
 
         self._server = None  # the gRPC server instance
         self._blocked = False
@@ -74,6 +74,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         self._server.start()
 
     def close(self):
+        self._array_queue.put(_exit)
         self._blocked = True
         if self._server is not None:
             self._server.stop(0)
@@ -83,6 +84,9 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __del__(self):
         self.close()
 
     def _check_valid(self, request):
@@ -133,11 +137,15 @@ class Servicer(thing_pb2_grpc.ThingServicer):
     def get_byte(self):
         return self._byte_queue.get()
 
-    def get_tensor(self, timeout: float = 5.0) -> TensorObject:
+    def get_tensor(self, timeout: Optional[float] = 5.0) -> Optional[TensorObject]:
         # Keep getting chunks until we received the first complete payload.
         # Incomplete payloads keep getting saved in `self._incomplete_chunks`.
         while True:
             array_payload = self._array_queue.get(timeout=timeout)
+            if array_payload is _exit:
+                self.logger.info("The queue received exit signal. Exiting.")
+                return None
+
             current_chunks = self._incomplete_chunks.get(array_payload.id, [])
             current_chunks.append(array_payload)
 
