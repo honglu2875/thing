@@ -126,6 +126,19 @@ def get(item: Union[int, str], index: int = 0):
         raise TypeError(f"The argument must be either a string or an int, got {type(item)}.")
 
 
+def get_all(name: str):
+    """
+    Command-line frontend for getting all tensors with the same name.
+    """
+    global server
+
+    if server is None:
+        rich.print("Server is not running.")
+        return None
+
+    return server.store.get_all_by_name(name)
+
+
 def summary():
     global server
 
@@ -162,5 +175,5 @@ def summary():
 
 __all__ = [
     "catch", "Client",
-    "serve", "status", "get", "summary", "Server",
+    "serve", "status", "get", "get_all", "summary", "Server",
 ]
