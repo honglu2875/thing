@@ -54,6 +54,11 @@ to obtain the captured tensor in your server session. It will not affect your tr
 whatever transformation you want to investigate further.
 
 
+# Some use cases
+Here is a screenshot when I was debugging FSDP. Just inserted some `thing.catch(...)` in the fsdp code and
+captured some scalar tensors right after the all-gather.
+![debug](assets/example.png)
+
 # FAQ
 - Q: Why not logging?
 

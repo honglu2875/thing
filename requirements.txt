@@ -1,4 +1,5 @@
 grpcio
+grpcio-tools
 asyncio
 numpy
 rich

@@ -190,6 +190,8 @@ class ThingClient:
             decide whether to block on the future or not.
             If the server is not available, it will return None.
         """
+        if array is None:
+            return None
         server = _validate_server_name(server, self._logger)
         if (
             self.server_available is None and not server
