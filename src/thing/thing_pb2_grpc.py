@@ -19,9 +19,19 @@ class ThingStub(object):
                 request_serializer=thing_dot_thing__pb2.CatchArrayRequest.SerializeToString,
                 response_deserializer=thing_dot_thing__pb2.Response.FromString,
                 )
+        self.CatchString = channel.unary_unary(
+                '/thing.Thing/CatchString',
+                request_serializer=thing_dot_thing__pb2.CatchStringRequest.SerializeToString,
+                response_deserializer=thing_dot_thing__pb2.Response.FromString,
+                )
         self.CatchByte = channel.unary_unary(
                 '/thing.Thing/CatchByte',
                 request_serializer=thing_dot_thing__pb2.CatchByteRequest.SerializeToString,
+                response_deserializer=thing_dot_thing__pb2.Response.FromString,
+                )
+        self.CatchPyTree = channel.unary_unary(
+                '/thing.Thing/CatchPyTree',
+                request_serializer=thing_dot_thing__pb2.PyTreeNode.SerializeToString,
                 response_deserializer=thing_dot_thing__pb2.Response.FromString,
                 )
         self.HealthCheck = channel.unary_unary(
@@ -40,7 +50,19 @@ class ThingServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CatchString(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def CatchByte(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CatchPyTree(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -60,9 +82,19 @@ def add_ThingServicer_to_server(servicer, server):
                     request_deserializer=thing_dot_thing__pb2.CatchArrayRequest.FromString,
                     response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
             ),
+            'CatchString': grpc.unary_unary_rpc_method_handler(
+                    servicer.CatchString,
+                    request_deserializer=thing_dot_thing__pb2.CatchStringRequest.FromString,
+                    response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
+            ),
             'CatchByte': grpc.unary_unary_rpc_method_handler(
                     servicer.CatchByte,
                     request_deserializer=thing_dot_thing__pb2.CatchByteRequest.FromString,
+                    response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
+            ),
+            'CatchPyTree': grpc.unary_unary_rpc_method_handler(
+                    servicer.CatchPyTree,
+                    request_deserializer=thing_dot_thing__pb2.PyTreeNode.FromString,
                     response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
             ),
             'HealthCheck': grpc.unary_unary_rpc_method_handler(
@@ -98,6 +130,23 @@ class Thing(object):
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
+    def CatchString(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/thing.Thing/CatchString',
+            thing_dot_thing__pb2.CatchStringRequest.SerializeToString,
+            thing_dot_thing__pb2.Response.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
     def CatchByte(request,
             target,
             options=(),
@@ -110,6 +159,23 @@ class Thing(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/thing.Thing/CatchByte',
             thing_dot_thing__pb2.CatchByteRequest.SerializeToString,
+            thing_dot_thing__pb2.Response.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def CatchPyTree(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/thing.Thing/CatchPyTree',
+            thing_dot_thing__pb2.PyTreeNode.SerializeToString,
             thing_dot_thing__pb2.Response.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

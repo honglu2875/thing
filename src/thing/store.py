@@ -99,39 +99,11 @@ class Store:
             return 0
         return len(self._name_to_id[name])
 
-    def describe(self, item: Union[str, int]):
+    def get_names(self):
         """
-        Command-line frontend for describing a tensor and its metadata.
-
-        Args:
-            item: the name or id of the tensor.
+        Get the names of all tensors.
         """
-        import rich
-
-        if isinstance(item, str):
-            obj = self.by_name(item)
-        elif isinstance(item, int):
-            obj = self.by_id(item)
-        else:
-            raise TypeError(f"Unsupported type {type(item)}")
-
-        rich.print(f"Name       : {obj.name}")
-        rich.print(f"Id         : {obj.id}")
-        rich.print(f"Shape      : {obj.shape}")
-        rich.print(f"Received at: {datetime.fromtimestamp(obj.timestamp)}")
-        rich.print(f"Client addr: {obj.client_addr}")
-        if len(self._name_to_id[obj.name]) > 1:
-            rich.print(
-                f"Received {len(self._name_to_id[obj.name])} times under the same name."
-            )
-            rich.print(
-                "To retrieve a historical version, use `.get_tensor_by_name(name, index)`."
-            )
-            rich.print(
-                "Example:\n"
-                "    `.get_tensor_by_name('my_tensor', 0)` for the latest version.\n"
-                "    `.get_tensor_by_name('my_tensor', 1)` for the second latest version."
-            )
+        return list(self._name_to_id.keys())
 
     def __getitem__(self, item: Union[str, int]):
         if isinstance(item, str):  # if string, assume it's a name

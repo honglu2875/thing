@@ -32,23 +32,32 @@ for i in range(100):
 ```
 
 Then, in a separate python session, you can do
+
 ```python
+import thing.interactive
 import thing
-thing.serve()
+
+thing.interactive.serve()
 ```
 to spin up a server that listens to the client captures.
 
 `thing.status()` will show you the current status, but you don't need to run it in order to receive the tensors.
 
 Try
+
 ```python
-thing.summary()
+import thing.interactive
+
+thing.interactive.summary()
 ```
 to get an idea about the recent captures from clients.
 
 If you received the captures, try, for example,
+
 ```python
-thing.get('lm_head_weight')
+import thing.interactive
+
+thing.interactive.get('lm_head_weight')
 ```
 to obtain the captured tensor in your server session. It will not affect your training code and you can apply
 whatever transformation you want to investigate further.

@@ -13,11 +13,13 @@
 # limitations under the License.
 import dataclasses
 import logging
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Thread
-from typing import Optional
+from typing import Callable, Optional
 
 from thing.argument import ServerArguments, ServicerArguments
-from thing.servicer import Servicer, _exit
+from thing.servicer import Servicer
 from thing.store import Store
 
 
@@ -46,12 +48,45 @@ class Server:
         self._stopped = False
 
     def _retrieve_obj(self):
-        while not self._stopped:
-            obj = self.servicer.get_tensor(timeout=None)
+        with ThreadPoolExecutor(3) as pool:
+            target_fns = [
+                self.servicer.get_tensor,
+                self.servicer.get_string,
+                self.servicer.get_pytree,
+            ]
+            futures: list[Optional[Future]] = [None] * len(target_fns)
+            while not self._stopped and not threading._SHUTTING_DOWN:
+                # There is a tricky deadlock problem without the `threading._SHUTTING_DOWN`:
+                #   - Data queues are created first.
+                #   - By creating the thread pool, another thread along with a simple queue is created.
+                #   - The target_fns inside thread pool wait for the original data queues.
+                #   - When the program exits, queues are closed in *REVERSE* order!
+                #   - The simple queue of the thread pool is trying to close first,
+                #     but the target_fns are waiting for the original data queues to close
+                #   - deadlock!
+                # `threading._SHUTTING_DOWN` solves it because it is flipped to True *BEFORE* trying
+                # to close the queues in reverse order.
 
-            if obj is None:
-                break
-            self.store.add(obj)
+                for i, fn in enumerate(target_fns):
+                    if futures[i] is None:
+                        futures[i] = pool.submit(fn)
+
+                for i, future in enumerate(futures):
+                    if future.done():
+                        obj = future.result()
+                        futures[i] = None
+                    else:
+                        continue
+
+                    if obj is None:  # only ever return None when the servicer is closed
+                        return
+                    self.store.add(obj)
+                    futures[i] = None
+
+            self.servicer.close()
+            for future in futures:
+                if future is not None:
+                    future.cancel()
 
     def start(self):
         self.servicer.start()

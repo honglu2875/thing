@@ -27,6 +27,14 @@ enum STATUS {
     FAILURE = 1;
 }
 
+enum NODE_TYPE {
+  LIST = 0;
+  TUPLE = 1;
+  DICT = 2;
+  TENSOR = 3; // A leaf node
+  STRING = 4; // A leaf node
+}
+
 message CatchArrayRequest {
   // Send a serialized array of bytes
   int64 id = 1;  // Unique identifier of this array
@@ -37,6 +45,25 @@ message CatchArrayRequest {
   bytes data = 6;
   optional uint32 chunk_id = 7;  // If sending in chunks, the chunk_id goes as 0, 1, 2, ...
   uint32 num_chunks = 8;  // total number of chunks
+}
+
+message CatchStringRequest {
+  // Send a string
+  int64 id = 1;  // Unique identifier of this array
+  optional string var_name = 2;  // Variable name
+  string data = 3;
+}
+
+message PyTreeNode {
+  // A PyTree object where:
+  // - leaves are either arrays or strings
+  // - nodes are lists, tuples or dicts
+  int64 id = 1;  // Unique identifier of this array
+  optional string var_name = 2;  // Variable name
+  optional NODE_TYPE node_type = 3;  // "list", "tuple", "dict", "tensor" or "string"
+  repeated PyTreeNode children = 4;
+  optional string key = 5;  // Only for dicts
+  optional int64 object_id = 6;  // For leaves to identify their exact object id
 }
 
 message CatchByteRequest {
@@ -54,6 +81,8 @@ message Response {
 
 service Thing {
   rpc CatchArray (CatchArrayRequest) returns (Response);
+  rpc CatchString (CatchStringRequest) returns (Response);
   rpc CatchByte (CatchByteRequest) returns (Response);
+  rpc CatchPyTree (PyTreeNode) returns (Response);
   rpc HealthCheck (HealthCheckRequest) returns (Response);
 }

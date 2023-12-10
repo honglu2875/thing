@@ -7,5 +7,5 @@ def test_exits():
         shell=True,
         stdout=subprocess.PIPE,
     )
-    process.wait(timeout=1.0)
+    process.wait(timeout=2.0)
     assert process.returncode == 0

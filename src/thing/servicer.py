@@ -56,6 +56,8 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         self.logger = logger or logging.getLogger(__name__)
         self._byte_queue = Queue(max_size)
         self._array_queue = Queue(max_size)
+        self._string_queue = Queue(max_size)
+        self._pytree_queue = Queue(max_size)
 
         self._incomplete_chunks = {}  # save incomplete chunks of arrays
 
@@ -75,6 +77,8 @@ class Servicer(thing_pb2_grpc.ThingServicer):
 
     def close(self):
         self._array_queue.put(_exit)
+        self._string_queue.put(_exit)
+        self._pytree_queue.put(_exit)
         self._blocked = True
         if self._server is not None:
             self._server.stop(0)
@@ -99,14 +103,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
             return False
         return True
 
-    def CatchByte(self, request, context):
-        if not self._check_valid(request):
-            return thing_pb2.Response(status=thing_pb2.STATUS.FAILURE)
-
-        self._byte_queue.put(request.data)
-        return thing_pb2.Response(status=thing_pb2.STATUS.SUCCESS)
-
-    def CatchArray(self, request, context):
+    def _check_register_request(self, request, context):
         if not self._check_valid(request):
             return thing_pb2.Response(status=thing_pb2.STATUS.FAILURE)
 
@@ -128,8 +125,28 @@ class Servicer(thing_pb2_grpc.ThingServicer):
 
         self._id_to_timestamp[request.id] = time.time()
 
-        self._array_queue.put(request)
+    def _catch(self, request, context, queue):
+        self._check_register_request(request, context)
+
+        queue.put(request)
         return thing_pb2.Response(status=thing_pb2.STATUS.SUCCESS)
+
+    def CatchByte(self, request, context):
+        # todo: have not exposed this yet on client
+        if not self._check_valid(request):
+            return thing_pb2.Response(status=thing_pb2.STATUS.FAILURE)
+
+        self._byte_queue.put(request.data)
+        return thing_pb2.Response(status=thing_pb2.STATUS.SUCCESS)
+
+    def CatchArray(self, request, context):
+        return self._catch(request, context, self._array_queue)
+
+    def CatchString(self, request, context):
+        return self._catch(request, context, self._string_queue)
+
+    def CatchPyTree(self, request, context):
+        return self._catch(request, context, self._pytree_queue)
 
     def HealthCheck(self, request, context):
         return thing_pb2.Response(status=thing_pb2.STATUS.SUCCESS)
@@ -143,7 +160,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         while True:
             array_payload = self._array_queue.get(timeout=timeout)
             if array_payload is _exit:
-                self.logger.info("The queue received exit signal. Exiting.")
+                self.logger.info("The array queue received exit signal. Exiting.")
                 return None
 
             current_chunks = self._incomplete_chunks.get(array_payload.id, [])
@@ -162,3 +179,17 @@ class Servicer(thing_pb2_grpc.ThingServicer):
             client_addr=self._id_to_client_addr.get(array_payload.id, "unknown"),
             timestamp=self._id_to_timestamp.get(array_payload.id, 0),
         )
+
+    def get_string(self, timeout: Optional[float] = 5.0):
+        obj = self._string_queue.get(timeout=timeout)
+        if obj is _exit:
+            self.logger.info("The string queue received exit signal. Exiting.")
+            return None
+        return obj
+
+    def get_pytree(self, timeout: Optional[float] = 5.0):
+        obj = self._pytree_queue.get(timeout=timeout)
+        if obj is _exit:
+            self.logger.info("The pytree queue received exit signal. Exiting.")
+            return None
+        return obj

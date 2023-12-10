@@ -14,12 +14,12 @@
 import contextlib
 import ctypes
 import logging
-from numbers import Number
 import secrets
 import threading
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Optional, Any
+from numbers import Number
+from typing import Any, Optional
 
 import grpc
 import numpy as np
@@ -51,7 +51,7 @@ class ThingClient:
         server_port: str | int,
         logger: Optional[logging.Logger] = None,
         chunk_size: int = 128 * 1024,
-        logging_level: str = 'ERROR',
+        logging_level: str = "ERROR",
     ):
         self._server_addr = server_addr
         self._server_port = str(server_port)
@@ -63,7 +63,9 @@ class ThingClient:
         self._thread_pool = ThreadPoolExecutor()
         self._id_lock = threading.Lock()
 
-        self._every_counter = defaultdict(lambda: 0)  # implement `.catch(..., every=k)` by keeping track of the counter
+        self._every_counter = defaultdict(
+            lambda: 0
+        )  # implement `.catch(..., every=k)` by keeping track of the counter
 
     def _test_server(self) -> bool:
         with self._set_channel_stub() as stub:
@@ -103,7 +105,7 @@ class ThingClient:
         and sends it to the server in bytes and in chunks without creating copies.
         """
         with self._id_lock:  # avoid clashing ids
-            idx = secrets.randbelow(2 ** 63 - 1)  # random int64
+            idx = secrets.randbelow(2**63 - 1)  # random int64
 
         if array.dtype.name in _numpy_dtypes:
             dtype = _numpy_dtypes[array.dtype.name]
@@ -169,7 +171,11 @@ class ThingClient:
         )
 
     def catch(
-        self, array: Any, name: Optional[str] = None, server: Optional[str] = None, every: int = 1
+        self,
+        array: Any,
+        name: Optional[str] = None,
+        server: Optional[str] = None,
+        every: int = 1,
     ) -> Optional[Future]:
         """
         Catch an array.
@@ -211,17 +217,14 @@ class ThingClient:
             array = np.array(array)
 
         # Sacrifice a little type-check robustness to avoid unnecessary imports
-        if (
-            str(array.__class__) == "<class 'numpy.ndarray'>"
-        ):  # Numpy array naming should be stable enough
+        # Numpy array naming should be stable enough
+        if str(array.__class__) == "<class 'numpy.ndarray'>":
             _fn = self._catch_numpy
-        elif (
-            str(array.__class__) == "<class 'torch.Tensor'>"
-        ):  # Torch tensor naming should be stable enough
+        # Torch tensor naming should be stable enough
+        elif str(array.__class__) == "<class 'torch.Tensor'>":
             _fn = self._catch_torch
-        elif "ArrayImpl" in str(
-            array.__class__
-        ):  # May not be robust since JAX makes changes frequently
+        # May not be robust since JAX makes changes frequently
+        elif "ArrayImpl" in str(array.__class__):
             _fn = self._catch_jax
         else:
             self._logger.error(f"Unsupported array type {array.__class__}")
