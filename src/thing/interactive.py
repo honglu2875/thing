@@ -83,7 +83,7 @@ def get(item: Union[int, str], index: int = 0):
         return None
 
     if isinstance(item, int):
-        return server.store.get_tensor_by_id(item)
+        return server.store.get_object_by_id(item)
     elif isinstance(item, str):
         hist_len = server.store.get_len(item)
         if not _get_note_displayed:
@@ -94,7 +94,7 @@ def get(item: Union[int, str], index: int = 0):
                 )
                 rich.print(f"  To get the i-th latest version, use `.get(name, i)`.")
         _get_note_displayed = True
-        return server.store.get_tensor_by_name(item, index)
+        return server.store.get_object_by_name(item, index)
     else:
         raise TypeError(
             f"The argument must be either a string or an int, got {type(item)}."
@@ -198,7 +198,7 @@ def ingest_all(overwrite=False):
                 )
                 continue
             try:
-                tensor = server.store.get_tensor_by_name(name)
+                tensor = server.store.get_object_by_name(name)
                 session_globals[name] = tensor
             except Exception as e:
                 rich.print(f"Failed to ingest tensor `{name}`: {e}")

@@ -13,13 +13,25 @@
 # limitations under the License.
 import logging
 import re
+import secrets
 import sys
+from numbers import Number
 from typing import Optional
 
 import numpy as np
 
 from thing import thing_pb2
-from thing.type import TensorObject
+from thing.type import Object, StringObject, TensorObject
+
+_used_hash = set()
+
+
+def get_rand_id():
+    global _used_hash
+    while (idx := secrets.randbelow(2**63 - 1)) in _used_hash:
+        pass
+    _used_hash.add(idx)
+    return idx
 
 
 def _set_up_logger(name: str):
@@ -111,3 +123,118 @@ def reconstruct_tensor_object(
     return TensorObject.from_proto(
         chunks[0], array, client_addr=client_addr, timestamp=timestamp
     )
+
+
+def reconstruct_string_object(
+    string_request: thing_pb2.CatchStringRequest,
+    client_addr: str = "unknown",
+    timestamp: int = 0,
+):
+    data = string_request.data
+    return StringObject.from_proto(
+        string_request, data, client_addr=client_addr, timestamp=timestamp
+    )
+
+
+def reconstruct_pytree_object(
+    pytree_request: thing_pb2.PyTreeNode,
+    client_addr: str = "unknown",
+    timestamp: int = 0,
+):
+    data = pytree_request  # Unravel the pytree object at a later time
+    return StringObject.from_proto(
+        pytree_request, data, client_addr=client_addr, timestamp=timestamp
+    )
+
+
+def _is_tensor(obj):
+    # Avoid importing all three major frameworks!!
+    # Robustness is taking a hit, so be aware.
+    if (
+        isinstance(obj, Number)
+        or str(obj.__class__)
+        in [
+            "<class 'numpy.ndarray'>",
+            "<class 'torch.Tensor'>",
+        ]
+        or "ArrayImpl" in str(obj.__class__)
+    ):
+        return True
+    return False
+
+
+def _get_node_type(obj):
+    if isinstance(obj, tuple):
+        return thing_pb2.NODE_TYPE.TUPLE
+    elif isinstance(obj, list):
+        return thing_pb2.NODE_TYPE.LIST
+    elif isinstance(obj, dict):
+        return thing_pb2.NODE_TYPE.DICT
+    elif isinstance(obj, str):
+        return thing_pb2.NODE_TYPE.STRING
+    elif _is_tensor(obj):
+        return thing_pb2.NODE_TYPE.TENSOR
+    else:
+        raise TypeError(f"Unsupported type {type(obj)}")
+
+
+def _prepare_pytree_obj(obj, id_to_leaves=None, key=None, name=None):
+    id_to_leaves = {} if id_to_leaves is None else id_to_leaves
+    idx = get_rand_id()
+
+    if isinstance(obj, (tuple, list)):
+        root = thing_pb2.PyTreeNode(
+            id=idx,
+            var_name=name,
+            node_type=_get_node_type(obj),
+            children=[_prepare_pytree_obj(child, id_to_leaves)[0] for child in obj],
+            key=key,
+        )
+    elif isinstance(obj, dict):
+        root = thing_pb2.PyTreeNode(
+            id=idx,
+            var_name=name,
+            node_type=_get_node_type(obj),
+            children=[
+                _prepare_pytree_obj(child, id_to_leaves, key=k)[0]
+                for k, child in obj.items()
+            ],
+            key=key,
+        )
+    elif _is_tensor(obj) or isinstance(obj, str):
+        root = thing_pb2.PyTreeNode(
+            id=idx,
+            var_name=name,
+            node_type=_get_node_type(obj),
+            children=[],
+            object_id=idx,
+            key=key,
+        )
+        id_to_leaves[idx] = obj
+    else:
+        raise TypeError(f"Unsupported type {type(obj)}")
+
+    return root, id_to_leaves
+
+
+def _reconstruct_pytree_obj(root: thing_pb2.PyTreeNode, id_to_leaves: dict):
+    if root.node_type == thing_pb2.NODE_TYPE.TUPLE:
+        return tuple(
+            [_reconstruct_pytree_obj(child, id_to_leaves) for child in root.children]
+        )
+    elif root.node_type == thing_pb2.NODE_TYPE.LIST:
+        return [_reconstruct_pytree_obj(child, id_to_leaves) for child in root.children]
+    elif root.node_type == thing_pb2.NODE_TYPE.DICT:
+        return {
+            child.key: _reconstruct_pytree_obj(child, id_to_leaves)
+            for child in root.children
+        }
+    elif root.node_type in [thing_pb2.NODE_TYPE.TENSOR, thing_pb2.NODE_TYPE.STRING]:
+        if root.object_id not in id_to_leaves:
+            raise NameError
+        leaf = id_to_leaves[root.object_id]
+        if isinstance(leaf, Object):  # unravel wrapped objects
+            leaf = leaf.data
+        return leaf
+    else:
+        raise TypeError(f"Unsupported type {root.node_type}")

@@ -14,10 +14,8 @@
 import contextlib
 import ctypes
 import logging
-import secrets
-import threading
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from numbers import Number
 from typing import Any, Optional
 
@@ -25,7 +23,9 @@ import grpc
 import numpy as np
 
 from thing import thing_pb2, thing_pb2_grpc
-from thing.utils import _numpy_dtypes, _validate_server_name
+from thing.type import Futures
+from thing.utils import (_numpy_dtypes, _prepare_pytree_obj,
+                         _validate_server_name, get_rand_id)
 
 
 class ThingClient:
@@ -61,7 +61,6 @@ class ThingClient:
 
         self.server_available = None
         self._thread_pool = ThreadPoolExecutor()
-        self._id_lock = threading.Lock()
 
         self._every_counter = defaultdict(
             lambda: 0
@@ -95,6 +94,7 @@ class ThingClient:
 
     def _catch(
         self,
+        idx: int,
         array: np.ndarray,
         name: Optional[str] = None,
         server: Optional[str] = None,
@@ -104,9 +104,6 @@ class ThingClient:
         The core of array catching. It only receives a numpy array (already converted from torch or jax),
         and sends it to the server in bytes and in chunks without creating copies.
         """
-        with self._id_lock:  # avoid clashing ids
-            idx = secrets.randbelow(2**63 - 1)  # random int64
-
         if array.dtype.name in _numpy_dtypes:
             dtype = _numpy_dtypes[array.dtype.name]
         else:
@@ -146,44 +143,118 @@ class ThingClient:
 
         return True
 
+    def _catch_string(
+        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
+    ) -> bool:
+        try:
+            with self._set_channel_stub(server) as stub:
+                response = stub.CatchString(
+                    thing_pb2.CatchStringRequest(
+                        id=idx,
+                        var_name=name,
+                        data=array,
+                    ),
+                    timeout=self._timeout,
+                )
+                if response.status != thing_pb2.STATUS.SUCCESS:
+                    return False
+        except Exception as e:
+            self._logger.error(f"Error when sending string: {e}")
+            return False
+
+        return True
+
+    def _catch_pytree_structure(self, root, server: Optional[str] = None) -> bool:
+        try:
+            with self._set_channel_stub(server) as stub:
+                response = stub.CatchPyTree(
+                    root,
+                    timeout=self._timeout,
+                )
+                if response.status != thing_pb2.STATUS.SUCCESS:
+                    return False
+        except Exception as e:
+            self._logger.error(f"Error when sending pytree structure: {e}")
+            return False
+
+        return True
+
     def _catch_torch(
-        self, array, name: Optional[str] = None, server: Optional[str] = None
+        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         # We have to unfortunately detach and offload the array to CPU which may cause a sync
         array = array.detach().cpu().numpy(force=False)  # force=False to avoid a copy
         return self._catch(
-            array, name=name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
+            idx, array, name=name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
         )
 
     def _catch_jax(
-        self, array, name: Optional[str] = None, server: Optional[str] = None
+        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         array = np.array(array, copy=False)
         return self._catch(
-            array, name=name, framework=thing_pb2.FRAMEWORK.JAX, server=server
+            idx, array, name=name, framework=thing_pb2.FRAMEWORK.JAX, server=server
         )
 
     def _catch_numpy(
-        self, array, name: Optional[str] = None, server: Optional[str] = None
+        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         return self._catch(
-            array, name=name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
+            idx, array, name=name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
         )
+
+    def _catch_tensors_and_strings(
+        self,
+        ids: list[int],
+        objects: list,
+        names: list[Optional[str]],
+        server: Optional[str] = None,
+    ) -> Futures:
+        futures = []
+        for idx, obj, name in zip(ids, objects, names):
+            # For scalars, default to numpy array with shape ()
+            if isinstance(obj, Number):
+                obj = np.array(obj)
+
+            # Sacrifice a little type-check robustness to avoid unnecessary imports
+            if isinstance(obj, str):
+                _fn = self._catch_string
+            # Numpy array naming should be stable enough
+            elif str(obj.__class__) == "<class 'numpy.ndarray'>":
+                _fn = self._catch_numpy
+            # Torch tensor naming should be stable enough
+            elif str(obj.__class__) == "<class 'torch.Tensor'>":
+                _fn = self._catch_torch
+            # May not be robust since JAX makes changes frequently
+            elif "ArrayImpl" in str(obj.__class__):
+                _fn = self._catch_jax
+            else:
+                self._logger.error(f"Unsupported array type {obj.__class__}")
+                continue
+
+            futures.append(
+                self._thread_pool.submit(_fn, idx, obj, name=name, server=server)
+            )
+
+        return Futures(futures)
 
     def catch(
         self,
-        array: Any,
+        obj: Any,
         name: Optional[str] = None,
         server: Optional[str] = None,
         every: int = 1,
-    ) -> Optional[Future]:
+    ) -> Optional[Futures]:
         """
         Catch an array.
         Args:
-            array: the array to be caught. It can be
+            obj: the object to be caught. It can be
                 - a numpy array
                 - a torch tensor
                 - a jax array
+                - a list or tuple
+                - a dict
+                - a string
                 We however do not import any of these libraries to avoid overhead.
             name: the name of the variable. If not provided, it will be None.
                 In the case of None, the logger will refer to it as "<noname>".
@@ -196,7 +267,7 @@ class ThingClient:
             decide whether to block on the future or not.
             If the server is not available, it will return None.
         """
-        if array is None:
+        if obj is None:
             return None
         server = _validate_server_name(server, self._logger)
         if (
@@ -212,27 +283,23 @@ class ThingClient:
             if self._every_counter[name] % every != 0:
                 return None
 
-        # For scalars, default to numpy array with shape ()
-        if isinstance(array, Number):
-            array = np.array(array)
+        if isinstance(obj, (tuple, list, dict)):
+            root, id_to_leaves = _prepare_pytree_obj(obj, name=name)
+            ids = []
+            objects = []
+            for k, v in id_to_leaves.items():
+                ids.append(k)
+                objects.append(v)
+            # todo: how to assign names for intermediate nodes?
+            names = [None] * len(ids)
+            self._catch_tensors_and_strings(ids, objects, names, server=server)
 
-        # Sacrifice a little type-check robustness to avoid unnecessary imports
-        # Numpy array naming should be stable enough
-        if str(array.__class__) == "<class 'numpy.ndarray'>":
-            _fn = self._catch_numpy
-        # Torch tensor naming should be stable enough
-        elif str(array.__class__) == "<class 'torch.Tensor'>":
-            _fn = self._catch_torch
-        # May not be robust since JAX makes changes frequently
-        elif "ArrayImpl" in str(array.__class__):
-            _fn = self._catch_jax
+            # Send the pytree object structure
+            self._catch_pytree_structure(root, server=server)
         else:
-            self._logger.error(f"Unsupported array type {array.__class__}")
-            return None
-
-        future = self._thread_pool.submit(_fn, array, name=name, server=server)
-
-        return future
+            return self._catch_tensors_and_strings(
+                [get_rand_id()], [obj], [name], server=server
+            )
 
     @property
     def target_server(self):

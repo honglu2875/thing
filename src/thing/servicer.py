@@ -16,13 +16,14 @@ import sys
 import time
 from concurrent import futures
 from queue import Queue
-from typing import Optional
+from typing import Any, Optional, Union
 
 import grpc
 
 from thing import thing_pb2, thing_pb2_grpc
-from thing.type import TensorObject
-from thing.utils import reconstruct_tensor_object
+from thing.type import PyTreeObject, StringObject, TensorObject
+from thing.utils import (reconstruct_pytree_object, reconstruct_string_object,
+                         reconstruct_tensor_object)
 
 _exit = object()  # a sentinel object to indicate the end of the queue
 
@@ -158,7 +159,9 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         # Keep getting chunks until we received the first complete payload.
         # Incomplete payloads keep getting saved in `self._incomplete_chunks`.
         while True:
-            array_payload = self._array_queue.get(timeout=timeout)
+            array_payload: thing_pb2.CatchArrayRequest = self._array_queue.get(
+                timeout=timeout
+            )
             if array_payload is _exit:
                 self.logger.info("The array queue received exit signal. Exiting.")
                 return None
@@ -180,16 +183,24 @@ class Servicer(thing_pb2_grpc.ThingServicer):
             timestamp=self._id_to_timestamp.get(array_payload.id, 0),
         )
 
-    def get_string(self, timeout: Optional[float] = 5.0):
-        obj = self._string_queue.get(timeout=timeout)
+    def get_string(self, timeout: Optional[float] = 5.0) -> Optional[StringObject]:
+        obj: thing_pb2.CatchStringRequest = self._string_queue.get(timeout=timeout)
         if obj is _exit:
             self.logger.info("The string queue received exit signal. Exiting.")
             return None
-        return obj
+        return reconstruct_string_object(
+            obj,
+            client_addr=self._id_to_client_addr.get(obj.id, "unknown"),
+            timestamp=self._id_to_timestamp.get(obj.id, 0),
+        )
 
-    def get_pytree(self, timeout: Optional[float] = 5.0):
+    def get_pytree(self, timeout: Optional[float] = 5.0) -> Optional[PyTreeObject]:
         obj = self._pytree_queue.get(timeout=timeout)
         if obj is _exit:
             self.logger.info("The pytree queue received exit signal. Exiting.")
             return None
-        return obj
+        return reconstruct_pytree_object(
+            obj,
+            client_addr=self._id_to_client_addr.get(obj.id, "unknown"),
+            timestamp=self._id_to_timestamp.get(obj.id, 0),
+        )

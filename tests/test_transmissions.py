@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+import pytest
 import torch
 
 import thing
@@ -63,3 +64,11 @@ def test_chunks():
         thing.catch(arr, server="localhost:2877")
         res = server.get_tensor().data
         assert (arr == res).all()
+
+
+def test_strings():
+    test = "slkdafjölkdsjölkfjdsljfa"
+    with Servicer(port=2878) as server:
+        thing.catch(test, server="localhost:2878")
+        res = server.get_string().data
+        assert test == res
