@@ -21,7 +21,7 @@ from typing import Optional
 import numpy as np
 
 from thing import thing_pb2
-from thing.type import Object, StringObject, TensorObject
+from thing.type import Object, PyTreeObject, StringObject, TensorObject
 
 _used_hash = set()
 
@@ -142,7 +142,7 @@ def reconstruct_pytree_object(
     timestamp: int = 0,
 ):
     data = pytree_request  # Unravel the pytree object at a later time
-    return StringObject.from_proto(
+    return PyTreeObject.from_proto(
         pytree_request, data, client_addr=client_addr, timestamp=timestamp
     )
 

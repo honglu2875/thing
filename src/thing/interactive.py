@@ -122,16 +122,23 @@ def summary():
         return None
 
     _received_tensors = OrderedDict()
-    _received_noname_tensors = OrderedDict()
+    _received_strings = OrderedDict()
+    _received_pytree = OrderedDict()
+    _received_noname_obj = []
     _NUM_LOGS = float("inf")  # maybe limit the number of logs in the future
     # Scan _NUM_LOGS logs and write a summary
     for i, log in enumerate(server.store.get_history()):
         if i >= _NUM_LOGS:
             break
         if not log.name:
-            _received_noname_tensors[log.id] = server.store.by_id(log.id)
+            _received_noname_obj.append(log)
         else:
-            _received_tensors[log.name] = server.store.by_name(log.name)
+            if log.type == "tensor":
+                _received_tensors[log.name] = log
+            elif log.type == "string":
+                _received_strings[log.name] = log
+            elif log.type == "pytree":
+                _received_pytree[log.name] = log
 
     if _received_tensors:
         rich.print("Received tensors:")
@@ -141,11 +148,28 @@ def summary():
                 rich.print(f"  {name}: {tensor.shape} (latest, total {hist_len})")
             else:
                 rich.print(f"  {name}: {tensor.shape}")
+    if _received_strings:
+        rich.print("Received strings:")
+        for name, string in _received_strings.items():
+            hist_len = server.store.get_len(name)
+            excerpt = string[:20] + "..." if len(string) > 20 else ""
+            if hist_len > 1:
+                rich.print(f'  {name}: "{excerpt}" (latest, total {hist_len})')
+            else:
+                rich.print(f"  {name}: {excerpt}")
+    if _received_pytree:
+        rich.print("Received pytrees:")
+        for name, pytree in _received_pytree.items():
+            hist_len = server.store.get_len(name)
+            if hist_len > 1:
+                rich.print(f"  {name} (latest, total {hist_len})")
+            else:
+                rich.print(f"  {name}")
 
-    if _received_noname_tensors:
-        rich.print("Received unnamed tensors:")
-        for idx, tensor in _received_noname_tensors.items():
-            rich.print(f"  id={idx}: {tensor.shape}")
+    if _received_noname_obj:
+        rich.print("Received unnamed objects:")
+        for log in _received_noname_obj:
+            rich.print(f"  id={log.id}: {log.type}")
 
 
 def _show(log: HistoryRecord, console: Console):

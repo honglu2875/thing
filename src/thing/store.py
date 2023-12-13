@@ -16,10 +16,21 @@ class HistoryRecord:
     """
 
     id: int
+    type: str  # one of "tensor", "string", "pytree"
     name: Optional[str]
-    shape: Optional[tuple]
+    shape: Optional[tuple]  # only for tensors
     timestamp: int
     client_addr: str
+
+    def __post_init__(self):
+        if self.type == "tensor":
+            assert self.shape is not None
+        elif self.type == "pytree":
+            pass  # todo: add more metadata?
+        elif self.type == "string":
+            assert self.shape is None
+        else:
+            raise ValueError(f"Unsupported type {self.type}")
 
 
 class Store:
@@ -37,6 +48,15 @@ class Store:
                 self._logger.error("The object has not been completely transmitted.")
         return obj
 
+    @staticmethod
+    def _get_type(item: TensorObject | StringObject | PyTreeObject):
+        if isinstance(item, TensorObject):
+            return "tensor"
+        elif isinstance(item, StringObject):
+            return "string"
+        elif isinstance(item, PyTreeObject):
+            return "pytree"
+
     def add(self, item: TensorObject | StringObject | PyTreeObject):
         self._items[item.id] = item
         if item.name:
@@ -44,6 +64,7 @@ class Store:
         self._history.append(
             HistoryRecord(
                 id=item.id,
+                type=self._get_type(item),
                 name=item.name,
                 shape=item.shape if hasattr(item, "shape") else None,
                 timestamp=item.timestamp,

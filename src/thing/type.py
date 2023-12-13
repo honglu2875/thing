@@ -2,7 +2,7 @@ import dataclasses
 import time
 from concurrent.futures import Future
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from thing import thing_pb2
 
@@ -29,9 +29,11 @@ class Object:
     @classmethod
     def from_proto(
         cls,
-        proto: thing_pb2.CatchArrayRequest
-        | thing_pb2.CatchStringRequest
-        | thing_pb2.PyTreeNode,
+        proto: Union[
+            thing_pb2.CatchArrayRequest,
+            thing_pb2.CatchStringRequest,
+            thing_pb2.PyTreeNode,
+        ],
         obj: Any,
         client_addr: str,
         timestamp: Optional[int] = None,
