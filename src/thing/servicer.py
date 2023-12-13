@@ -155,7 +155,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
     def get_byte(self):
         return self._byte_queue.get()
 
-    def get_tensor(self, timeout: Optional[float] = 5.0) -> Optional[TensorObject]:
+    def get_tensor(self, timeout: Optional[float] = None) -> Optional[TensorObject]:
         # Keep getting chunks until we received the first complete payload.
         # Incomplete payloads keep getting saved in `self._incomplete_chunks`.
         while True:
@@ -183,7 +183,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
             timestamp=self._id_to_timestamp.get(array_payload.id, 0),
         )
 
-    def get_string(self, timeout: Optional[float] = 5.0) -> Optional[StringObject]:
+    def get_string(self, timeout: Optional[float] = None) -> Optional[StringObject]:
         obj: thing_pb2.CatchStringRequest = self._string_queue.get(timeout=timeout)
         if obj is _exit:
             self.logger.info("The string queue received exit signal. Exiting.")
@@ -194,7 +194,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
             timestamp=self._id_to_timestamp.get(obj.id, 0),
         )
 
-    def get_pytree(self, timeout: Optional[float] = 5.0) -> Optional[PyTreeObject]:
+    def get_pytree(self, timeout: Optional[float] = None) -> Optional[PyTreeObject]:
         obj = self._pytree_queue.get(timeout=timeout)
         if obj is _exit:
             self.logger.info("The pytree queue received exit signal. Exiting.")

@@ -68,26 +68,23 @@ class Server:
                     #   - deadlock!
                     # `threading._SHUTTING_DOWN` solves it because it is flipped to True *BEFORE* trying
                     # to close the queues in reverse order.
-                    try:
-                        for i, fn in enumerate(target_fns):
-                            if futures[i] is None and not threading._SHUTTING_DOWN:
-                                futures[i] = pool.submit(fn)
+                    for i, fn in enumerate(target_fns):
+                        if futures[i] is None and not threading._SHUTTING_DOWN:
+                            futures[i] = pool.submit(fn)
 
-                        for i, future in enumerate(futures):
-                            if future is not None and future.done():
-                                obj = future.result()
-                                futures[i] = None
-                            else:
-                                continue
-
-                            if (
-                                obj is None
-                            ):  # only ever return None when the servicer is closed
-                                return
-                            self.store.add(obj)
+                    for i, future in enumerate(futures):
+                        if future is not None and future.done():
+                            obj = future.result()
                             futures[i] = None
-                    except queue.Empty:
-                        continue
+                        else:
+                            continue
+
+                        if (
+                            obj is None
+                        ):  # only ever return None when the servicer is closed
+                            return
+                        self.store.add(obj)
+                        futures[i] = None
             finally:
                 self.servicer.close()
                 for future in futures:
