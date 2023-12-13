@@ -11,6 +11,7 @@ Say, you have a neural network training script, and you just want to play with s
 python session, investigating the L2-norms, distributions, eigen-vectors, etc. in a live and interactive manner without
 disturbing your training job.
 
+## Client: catching the tensors
 You can quickly modify your training code by inserting some `thing.catch(...)` as follows:
 ```python
 import thing
@@ -31,33 +32,40 @@ for i in range(100):
 ... # your rest of the codes
 ```
 
-Then, in a separate python session, you can do
+## Server: receive and interact
+
+Once the client is set up, in a separate python REPL or jupyter notebook, you can do
 
 ```python
-import thing.interactive
 import thing
 
-thing.interactive.serve()
+thing.serve()
 ```
 to spin up a server that listens to the client captures.
 
-`thing.status()` will show you the current status, but you don't need to run it in order to receive the tensors.
+Once a tensor is received, you can play with it. 
 
-Try
+### help()
+
+First of all, the rest of the API can be seen when running `thing.help()`.
+
+### status()
+
+`thing.status()` will show you the current status with a spinner, but you don't need to run this in order to receive the tensors.
+
+### summary()
 
 ```python
-import thing.interactive
-
-thing.interactive.summary()
+thing.summary()
 ```
-to get an idea about the recent captures from clients.
+organize the recent capture logs.
 
 If you received the captures, try, for example,
 
 ```python
-import thing.interactive
+import thing
 
-thing.interactive.get('lm_head_weight')
+thing.get('lm_head_weight')
 ```
 to obtain the captured tensor in your server session. It will not affect your training code and you can apply
 whatever transformation you want to investigate further.
