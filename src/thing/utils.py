@@ -182,7 +182,15 @@ def _prepare_pytree_obj(obj, id_to_leaves=None, key=None, name=None):
     id_to_leaves = {} if id_to_leaves is None else id_to_leaves
     idx = get_rand_id()
 
-    if isinstance(obj, (tuple, list)):
+    if obj is None:
+        root = thing_pb2.PyTreeNode(
+            id=idx,
+            var_name=name,
+            node_type=thing_pb2.NODE_TYPE.NONE,
+            children=[],
+            key=key,
+        )
+    elif isinstance(obj, (tuple, list)):
         root = thing_pb2.PyTreeNode(
             id=idx,
             var_name=name,
@@ -218,7 +226,9 @@ def _prepare_pytree_obj(obj, id_to_leaves=None, key=None, name=None):
 
 
 def _reconstruct_pytree_obj(root: thing_pb2.PyTreeNode, id_to_leaves: dict):
-    if root.node_type == thing_pb2.NODE_TYPE.TUPLE:
+    if root.node_type == thing_pb2.NODE_TYPE.NONE:
+        return None
+    elif root.node_type == thing_pb2.NODE_TYPE.TUPLE:
         return tuple(
             [_reconstruct_pytree_obj(child, id_to_leaves) for child in root.children]
         )

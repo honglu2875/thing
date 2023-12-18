@@ -283,7 +283,7 @@ class ThingClient:
             if self._every_counter[name] % every != 0:
                 return None
 
-        if isinstance(obj, (tuple, list, dict)):
+        if obj is None or isinstance(obj, (tuple, list, dict)):
             root, id_to_leaves = _prepare_pytree_obj(obj, name=name)
             ids = []
             objects = []

@@ -32,6 +32,8 @@ def _equal(obj, obj2):
         return True
     elif isinstance(obj, (np.ndarray, torch.Tensor, jnp.ndarray)):
         return np.allclose(np.array(obj), np.array(obj2))
+    elif obj is None:
+        return obj2 is None
     else:
         raise TypeError(f"Unsupported type {type(obj)}")
 
@@ -51,6 +53,7 @@ def _equal(obj, obj2):
         ({"a": {"b": "c"}}, 3),
         (
             [
+                None,
                 1,
                 "hello",
                 [1, 2, 3],

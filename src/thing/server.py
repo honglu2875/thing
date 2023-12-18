@@ -13,7 +13,6 @@
 # limitations under the License.
 import dataclasses
 import logging
-import queue
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import Thread

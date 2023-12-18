@@ -39,6 +39,7 @@ class NODE_TYPE(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     DICT: _ClassVar[NODE_TYPE]
     TENSOR: _ClassVar[NODE_TYPE]
     STRING: _ClassVar[NODE_TYPE]
+    NONE: _ClassVar[NODE_TYPE]
 INT8: DTYPE
 INT16: DTYPE
 INT32: DTYPE
@@ -61,6 +62,7 @@ TUPLE: NODE_TYPE
 DICT: NODE_TYPE
 TENSOR: NODE_TYPE
 STRING: NODE_TYPE
+NONE: NODE_TYPE
 
 class CatchArrayRequest(_message.Message):
     __slots__ = ["id", "shape", "var_name", "dtype", "framework", "data", "chunk_id", "num_chunks"]
