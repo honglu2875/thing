@@ -16,17 +16,17 @@ class ThingStub(object):
         """
         self.CatchArray = channel.unary_unary(
                 '/thing.Thing/CatchArray',
-                request_serializer=thing_dot_thing__pb2.CatchArrayRequest.SerializeToString,
+                request_serializer=thing_dot_thing__pb2.Array.SerializeToString,
                 response_deserializer=thing_dot_thing__pb2.Response.FromString,
                 )
         self.CatchString = channel.unary_unary(
                 '/thing.Thing/CatchString',
-                request_serializer=thing_dot_thing__pb2.CatchStringRequest.SerializeToString,
+                request_serializer=thing_dot_thing__pb2.String.SerializeToString,
                 response_deserializer=thing_dot_thing__pb2.Response.FromString,
                 )
         self.CatchByte = channel.unary_unary(
                 '/thing.Thing/CatchByte',
-                request_serializer=thing_dot_thing__pb2.CatchByteRequest.SerializeToString,
+                request_serializer=thing_dot_thing__pb2.Byte.SerializeToString,
                 response_deserializer=thing_dot_thing__pb2.Response.FromString,
                 )
         self.CatchPyTree = channel.unary_unary(
@@ -79,17 +79,17 @@ def add_ThingServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CatchArray': grpc.unary_unary_rpc_method_handler(
                     servicer.CatchArray,
-                    request_deserializer=thing_dot_thing__pb2.CatchArrayRequest.FromString,
+                    request_deserializer=thing_dot_thing__pb2.Array.FromString,
                     response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
             ),
             'CatchString': grpc.unary_unary_rpc_method_handler(
                     servicer.CatchString,
-                    request_deserializer=thing_dot_thing__pb2.CatchStringRequest.FromString,
+                    request_deserializer=thing_dot_thing__pb2.String.FromString,
                     response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
             ),
             'CatchByte': grpc.unary_unary_rpc_method_handler(
                     servicer.CatchByte,
-                    request_deserializer=thing_dot_thing__pb2.CatchByteRequest.FromString,
+                    request_deserializer=thing_dot_thing__pb2.Byte.FromString,
                     response_serializer=thing_dot_thing__pb2.Response.SerializeToString,
             ),
             'CatchPyTree': grpc.unary_unary_rpc_method_handler(
@@ -124,7 +124,7 @@ class Thing(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/thing.Thing/CatchArray',
-            thing_dot_thing__pb2.CatchArrayRequest.SerializeToString,
+            thing_dot_thing__pb2.Array.SerializeToString,
             thing_dot_thing__pb2.Response.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -141,7 +141,7 @@ class Thing(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/thing.Thing/CatchString',
-            thing_dot_thing__pb2.CatchStringRequest.SerializeToString,
+            thing_dot_thing__pb2.String.SerializeToString,
             thing_dot_thing__pb2.Response.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -158,7 +158,7 @@ class Thing(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/thing.Thing/CatchByte',
-            thing_dot_thing__pb2.CatchByteRequest.SerializeToString,
+            thing_dot_thing__pb2.Byte.SerializeToString,
             thing_dot_thing__pb2.Response.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

@@ -36,7 +36,7 @@ enum NODE_TYPE {
   NONE = 5; // A leaf node
 }
 
-message CatchArrayRequest {
+message Array {
   // Send a serialized array of bytes
   int64 id = 1;  // Unique identifier of this array
   repeated int64 shape = 2;
@@ -48,7 +48,7 @@ message CatchArrayRequest {
   uint32 num_chunks = 8;  // total number of chunks
 }
 
-message CatchStringRequest {
+message String {
   // Send a string
   int64 id = 1;  // Unique identifier of this array
   optional string var_name = 2;  // Variable name
@@ -67,7 +67,7 @@ message PyTreeNode {
   optional int64 object_id = 6;  // For leaves to identify their exact object id
 }
 
-message CatchByteRequest {
+message Byte {
   // Send byte information without metadata
   // (Currently only for debugging. Maybe use it to allow for pickled objects in the future.)
   bytes data = 1;
@@ -81,9 +81,9 @@ message Response {
 }
 
 service Thing {
-  rpc CatchArray (CatchArrayRequest) returns (Response);
-  rpc CatchString (CatchStringRequest) returns (Response);
-  rpc CatchByte (CatchByteRequest) returns (Response);
+  rpc CatchArray (Array) returns (Response);
+  rpc CatchString (String) returns (Response);
+  rpc CatchByte (Byte) returns (Response);
   rpc CatchPyTree (PyTreeNode) returns (Response);
   rpc HealthCheck (HealthCheckRequest) returns (Response);
 }

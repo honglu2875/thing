@@ -21,7 +21,8 @@ from typing import Optional
 import numpy as np
 
 from thing import thing_pb2
-from thing.type import Object, PyTreeObject, StringObject, TensorObject
+from thing.type import (ArrayLike, Object, PyTree, PyTreeObject, StringObject,
+                        TensorObject)
 
 _used_hash = set()
 
@@ -93,7 +94,7 @@ def _validate_server_name(
     return server
 
 
-def reconstruct_array(chunks: list[thing_pb2.CatchArrayRequest]):
+def reconstruct_array(chunks: list[thing_pb2.Array]) -> ArrayLike:
     chunks = sorted(chunks, key=lambda x: x.chunk_id)
 
     # TODO: is there a way to avoid copying the data?
@@ -115,10 +116,10 @@ def reconstruct_array(chunks: list[thing_pb2.CatchArrayRequest]):
 
 
 def reconstruct_tensor_object(
-    chunks: list[thing_pb2.CatchArrayRequest],
+    chunks: list[thing_pb2.Array],
     client_addr: str = "unknown",
     timestamp: int = 0,
-):
+) -> TensorObject:
     array = reconstruct_array(chunks)
     return TensorObject.from_proto(
         chunks[0], array, client_addr=client_addr, timestamp=timestamp
@@ -126,10 +127,10 @@ def reconstruct_tensor_object(
 
 
 def reconstruct_string_object(
-    string_request: thing_pb2.CatchStringRequest,
+    string_request: thing_pb2.String,
     client_addr: str = "unknown",
     timestamp: int = 0,
-):
+) -> StringObject:
     data = string_request.data
     return StringObject.from_proto(
         string_request, data, client_addr=client_addr, timestamp=timestamp
@@ -140,14 +141,14 @@ def reconstruct_pytree_object(
     pytree_request: thing_pb2.PyTreeNode,
     client_addr: str = "unknown",
     timestamp: int = 0,
-):
+) -> PyTreeObject:
     data = pytree_request  # Unravel the pytree object at a later time
     return PyTreeObject.from_proto(
         pytree_request, data, client_addr=client_addr, timestamp=timestamp
     )
 
 
-def _is_tensor(obj):
+def _is_tensor(obj) -> bool:
     # Avoid importing all three major frameworks!!
     # Robustness is taking a hit, so be aware.
     if (
@@ -163,7 +164,7 @@ def _is_tensor(obj):
     return False
 
 
-def _get_node_type(obj):
+def _get_node_type(obj) -> int:
     if isinstance(obj, tuple):
         return thing_pb2.NODE_TYPE.TUPLE
     elif isinstance(obj, list):
@@ -178,7 +179,7 @@ def _get_node_type(obj):
         raise TypeError(f"Unsupported type {type(obj)}")
 
 
-def _prepare_pytree_obj(obj, id_to_leaves=None, key=None, name=None):
+def _prepare_pytree_obj(obj, id_to_leaves=None, key=None, name=None) -> tuple:
     id_to_leaves = {} if id_to_leaves is None else id_to_leaves
     idx = get_rand_id()
 
@@ -225,7 +226,9 @@ def _prepare_pytree_obj(obj, id_to_leaves=None, key=None, name=None):
     return root, id_to_leaves
 
 
-def _reconstruct_pytree_obj(root: thing_pb2.PyTreeNode, id_to_leaves: dict):
+def _reconstruct_pytree_obj(
+    root: thing_pb2.PyTreeNode, id_to_leaves: dict
+) -> Optional[PyTree]:
     if root.node_type == thing_pb2.NODE_TYPE.NONE:
         return None
     elif root.node_type == thing_pb2.NODE_TYPE.TUPLE:

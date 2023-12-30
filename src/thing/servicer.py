@@ -159,9 +159,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         # Keep getting chunks until we received the first complete payload.
         # Incomplete payloads keep getting saved in `self._incomplete_chunks`.
         while True:
-            array_payload: thing_pb2.CatchArrayRequest = self._array_queue.get(
-                timeout=timeout
-            )
+            array_payload: thing_pb2.Array = self._array_queue.get(timeout=timeout)
             if array_payload is _exit:
                 self.logger.info("The array queue received exit signal. Exiting.")
                 return None
@@ -184,7 +182,7 @@ class Servicer(thing_pb2_grpc.ThingServicer):
         )
 
     def get_string(self, timeout: Optional[float] = None) -> Optional[StringObject]:
-        obj: thing_pb2.CatchStringRequest = self._string_queue.get(timeout=timeout)
+        obj: thing_pb2.String = self._string_queue.get(timeout=timeout)
         if obj is _exit:
             self.logger.info("The string queue received exit signal. Exiting.")
             return None

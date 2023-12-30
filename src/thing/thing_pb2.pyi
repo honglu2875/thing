@@ -64,7 +64,7 @@ TENSOR: NODE_TYPE
 STRING: NODE_TYPE
 NONE: NODE_TYPE
 
-class CatchArrayRequest(_message.Message):
+class Array(_message.Message):
     __slots__ = ("id", "shape", "var_name", "dtype", "framework", "data", "chunk_id", "num_chunks")
     ID_FIELD_NUMBER: _ClassVar[int]
     SHAPE_FIELD_NUMBER: _ClassVar[int]
@@ -84,7 +84,7 @@ class CatchArrayRequest(_message.Message):
     num_chunks: int
     def __init__(self, id: _Optional[int] = ..., shape: _Optional[_Iterable[int]] = ..., var_name: _Optional[str] = ..., dtype: _Optional[_Union[DTYPE, str]] = ..., framework: _Optional[_Union[FRAMEWORK, str]] = ..., data: _Optional[bytes] = ..., chunk_id: _Optional[int] = ..., num_chunks: _Optional[int] = ...) -> None: ...
 
-class CatchStringRequest(_message.Message):
+class String(_message.Message):
     __slots__ = ("id", "var_name", "data")
     ID_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -110,7 +110,7 @@ class PyTreeNode(_message.Message):
     object_id: int
     def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., node_type: _Optional[_Union[NODE_TYPE, str]] = ..., children: _Optional[_Iterable[_Union[PyTreeNode, _Mapping]]] = ..., key: _Optional[str] = ..., object_id: _Optional[int] = ...) -> None: ...
 
-class CatchByteRequest(_message.Message):
+class Byte(_message.Message):
     __slots__ = ("data",)
     DATA_FIELD_NUMBER: _ClassVar[int]
     data: bytes

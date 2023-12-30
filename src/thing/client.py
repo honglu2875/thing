@@ -122,7 +122,7 @@ class ThingClient:
                         f"Chunk {i // self._chunk_size} of {len(data) // self._chunk_size}."
                     )
                     response = stub.CatchArray(
-                        thing_pb2.CatchArrayRequest(
+                        thing_pb2.Array(
                             id=idx,
                             var_name=name,
                             shape=array.shape,
@@ -149,7 +149,7 @@ class ThingClient:
         try:
             with self._set_channel_stub(server) as stub:
                 response = stub.CatchString(
-                    thing_pb2.CatchStringRequest(
+                    thing_pb2.String(
                         id=idx,
                         var_name=name,
                         data=array,

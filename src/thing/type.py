@@ -2,6 +2,7 @@ import dataclasses
 import time
 from concurrent.futures import Future
 from enum import Enum
+from numbers import Number
 from typing import Any, Optional, Union
 
 from thing import thing_pb2
@@ -11,6 +12,12 @@ class FRAMEWORK(Enum):
     NUMPY = 0
     TORCH = 1
     JAX = 2
+
+
+#
+ArrayLike = Union["np.ndarray", "torch.Tensor", "jaxlib.xla_extension.ArrayImpl"]
+Leaf = Union[ArrayLike, str, Number]
+PyTree = Union[tuple, list, dict, Leaf]
 
 
 @dataclasses.dataclass
@@ -30,8 +37,8 @@ class Object:
     def from_proto(
         cls,
         proto: Union[
-            thing_pb2.CatchArrayRequest,
-            thing_pb2.CatchStringRequest,
+            thing_pb2.Array,
+            thing_pb2.String,
             thing_pb2.PyTreeNode,
         ],
         obj: Any,
@@ -47,7 +54,7 @@ class Object:
             client_addr: the address of the client that sent the array.
             timestamp: the timestamp of the array.
         Returns:
-            The reconstructed TensorObject.
+            The reconstructed Object.
         """
         timestamp = int(time.time()) if timestamp is None else timestamp
         return cls(
