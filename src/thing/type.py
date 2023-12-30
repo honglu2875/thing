@@ -27,9 +27,8 @@ class FRAMEWORK(Enum):
     JAX = 2
 
 
-#
 ArrayLike = Union["np.ndarray", "torch.Tensor", "jaxlib.xla_extension.ArrayImpl"]
-Leaf = Union[ArrayLike, str, Number]
+Leaf = Optional[Union[ArrayLike, str, Number]]
 PyTree = Union[tuple, list, dict, Leaf]
 
 
