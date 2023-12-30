@@ -45,7 +45,7 @@ message Array {
   FRAMEWORK framework = 5;
   bytes data = 6;
   optional uint32 chunk_id = 7;  // If sending in chunks, the chunk_id goes as 0, 1, 2, ...
-  uint32 num_chunks = 8;  // total number of chunks
+  optional uint32 num_chunks = 8;  // Total number of chunks. Included when > 1.
 }
 
 message String {
@@ -64,7 +64,12 @@ message PyTreeNode {
   optional NODE_TYPE node_type = 3;  // "list", "tuple", "dict", "tensor", "string" or None
   repeated PyTreeNode children = 4;
   optional string key = 5;  // Only if **the previous level** is a dict
+
+  // Below are fields to identify the objects
   optional int64 object_id = 6;  // For leaves to identify their exact object id
+  // To reduce overheads, we sometimes directly carry small objects
+  optional String string = 7;
+  optional Array array = 8;
 }
 
 message Byte {

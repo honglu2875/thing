@@ -149,18 +149,16 @@ def reconstruct_pytree_object(
 
 
 def _is_tensor(obj) -> bool:
-    # Avoid importing all three major frameworks!!
-    # Robustness is taking a hit, so be aware.
-    if (
-        isinstance(obj, Number)
-        or str(obj.__class__)
-        in [
-            "<class 'numpy.ndarray'>",
-            "<class 'torch.Tensor'>",
-        ]
-        or "ArrayImpl" in str(obj.__class__)
-    ):
+    # This ugly function is to avoid importing all three frameworks.
+    # Note that we aim to be as non-intrusive as possible.
+    # However, robustness is taking a big hit, so be aware.
+    if isinstance(obj, Number) or str(obj.__class__) in [
+        "<class 'numpy.ndarray'>",
+        "<class 'torch.Tensor'>",
+        "<class 'jaxlib.xla_extension.ArrayImpl'>",
+    ]:
         return True
+    # We don't support subclasses of the three major tensor classes.
     return False
 
 

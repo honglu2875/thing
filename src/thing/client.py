@@ -115,6 +115,8 @@ class ThingClient:
 
         try:
             with self._set_channel_stub(server) as stub:
+                num_chunks = (len(data) + self._chunk_size - 1) // self._chunk_size
+                singleton = num_chunks == 1
                 for i in range(0, len(data), self._chunk_size):
                     self._logger.info(
                         f"Sending tensor {name or '<noname>'} of shape {array.shape} and "
@@ -129,9 +131,8 @@ class ThingClient:
                             dtype=dtype,
                             framework=framework,
                             data=data[i : i + self._chunk_size],
-                            chunk_id=i // self._chunk_size,
-                            num_chunks=(len(data) + self._chunk_size - 1)
-                            // self._chunk_size,
+                            chunk_id=None if singleton else i // self._chunk_size,
+                            num_chunks=None if singleton else num_chunks,
                         ),
                         timeout=self._timeout,
                     )

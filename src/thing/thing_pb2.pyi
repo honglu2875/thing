@@ -95,20 +95,24 @@ class String(_message.Message):
     def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., data: _Optional[str] = ...) -> None: ...
 
 class PyTreeNode(_message.Message):
-    __slots__ = ("id", "var_name", "node_type", "children", "key", "object_id")
+    __slots__ = ("id", "var_name", "node_type", "children", "key", "object_id", "string", "array")
     ID_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
     NODE_TYPE_FIELD_NUMBER: _ClassVar[int]
     CHILDREN_FIELD_NUMBER: _ClassVar[int]
     KEY_FIELD_NUMBER: _ClassVar[int]
     OBJECT_ID_FIELD_NUMBER: _ClassVar[int]
+    STRING_FIELD_NUMBER: _ClassVar[int]
+    ARRAY_FIELD_NUMBER: _ClassVar[int]
     id: int
     var_name: str
     node_type: NODE_TYPE
     children: _containers.RepeatedCompositeFieldContainer[PyTreeNode]
     key: str
     object_id: int
-    def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., node_type: _Optional[_Union[NODE_TYPE, str]] = ..., children: _Optional[_Iterable[_Union[PyTreeNode, _Mapping]]] = ..., key: _Optional[str] = ..., object_id: _Optional[int] = ...) -> None: ...
+    string: String
+    array: Array
+    def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., node_type: _Optional[_Union[NODE_TYPE, str]] = ..., children: _Optional[_Iterable[_Union[PyTreeNode, _Mapping]]] = ..., key: _Optional[str] = ..., object_id: _Optional[int] = ..., string: _Optional[_Union[String, _Mapping]] = ..., array: _Optional[_Union[Array, _Mapping]] = ...) -> None: ...
 
 class Byte(_message.Message):
     __slots__ = ("data",)

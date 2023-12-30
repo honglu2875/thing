@@ -167,7 +167,9 @@ class Servicer(thing_pb2_grpc.ThingServicer):
             current_chunks = self._incomplete_chunks.get(array_payload.id, [])
             current_chunks.append(array_payload)
 
-            if array_payload.num_chunks > len(current_chunks):
+            if array_payload.num_chunks is not None and array_payload.num_chunks > len(
+                current_chunks
+            ):
                 self._incomplete_chunks[array_payload.id] = current_chunks
                 continue
             break
