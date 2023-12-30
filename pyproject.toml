@@ -22,5 +22,7 @@ dev = [
     "pytest",
     "jax",
     "jaxlib",
-    "torch"
+    "torch",
+    "black",
+    "isort",
 ]

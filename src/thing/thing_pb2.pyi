@@ -7,7 +7,7 @@ from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Map
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class DTYPE(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__ = ()
     INT8: _ClassVar[DTYPE]
     INT16: _ClassVar[DTYPE]
     INT32: _ClassVar[DTYPE]
@@ -22,18 +22,18 @@ class DTYPE(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     BOOL: _ClassVar[DTYPE]
 
 class FRAMEWORK(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__ = ()
     NUMPY: _ClassVar[FRAMEWORK]
     TORCH: _ClassVar[FRAMEWORK]
     JAX: _ClassVar[FRAMEWORK]
 
 class STATUS(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__ = ()
     SUCCESS: _ClassVar[STATUS]
     FAILURE: _ClassVar[STATUS]
 
 class NODE_TYPE(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
-    __slots__ = []
+    __slots__ = ()
     LIST: _ClassVar[NODE_TYPE]
     TUPLE: _ClassVar[NODE_TYPE]
     DICT: _ClassVar[NODE_TYPE]
@@ -65,7 +65,7 @@ STRING: NODE_TYPE
 NONE: NODE_TYPE
 
 class CatchArrayRequest(_message.Message):
-    __slots__ = ["id", "shape", "var_name", "dtype", "framework", "data", "chunk_id", "num_chunks"]
+    __slots__ = ("id", "shape", "var_name", "dtype", "framework", "data", "chunk_id", "num_chunks")
     ID_FIELD_NUMBER: _ClassVar[int]
     SHAPE_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -85,7 +85,7 @@ class CatchArrayRequest(_message.Message):
     def __init__(self, id: _Optional[int] = ..., shape: _Optional[_Iterable[int]] = ..., var_name: _Optional[str] = ..., dtype: _Optional[_Union[DTYPE, str]] = ..., framework: _Optional[_Union[FRAMEWORK, str]] = ..., data: _Optional[bytes] = ..., chunk_id: _Optional[int] = ..., num_chunks: _Optional[int] = ...) -> None: ...
 
 class CatchStringRequest(_message.Message):
-    __slots__ = ["id", "var_name", "data"]
+    __slots__ = ("id", "var_name", "data")
     ID_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
@@ -95,7 +95,7 @@ class CatchStringRequest(_message.Message):
     def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., data: _Optional[str] = ...) -> None: ...
 
 class PyTreeNode(_message.Message):
-    __slots__ = ["id", "var_name", "node_type", "children", "key", "object_id"]
+    __slots__ = ("id", "var_name", "node_type", "children", "key", "object_id")
     ID_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
     NODE_TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -111,17 +111,17 @@ class PyTreeNode(_message.Message):
     def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., node_type: _Optional[_Union[NODE_TYPE, str]] = ..., children: _Optional[_Iterable[_Union[PyTreeNode, _Mapping]]] = ..., key: _Optional[str] = ..., object_id: _Optional[int] = ...) -> None: ...
 
 class CatchByteRequest(_message.Message):
-    __slots__ = ["data"]
+    __slots__ = ("data",)
     DATA_FIELD_NUMBER: _ClassVar[int]
     data: bytes
     def __init__(self, data: _Optional[bytes] = ...) -> None: ...
 
 class HealthCheckRequest(_message.Message):
-    __slots__ = []
+    __slots__ = ()
     def __init__(self) -> None: ...
 
 class Response(_message.Message):
-    __slots__ = ["status"]
+    __slots__ = ("status",)
     STATUS_FIELD_NUMBER: _ClassVar[int]
     status: STATUS
     def __init__(self, status: _Optional[_Union[STATUS, str]] = ...) -> None: ...

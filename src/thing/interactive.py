@@ -114,7 +114,13 @@ def get_all(name: str):
     return server.store.get_all_by_name(name)
 
 
-def summary():
+def summary(max_items: int = 5):
+    """
+    Prints summary.
+
+    Args:
+        max_items: maximal number of each type of items to show.
+    """
     server = thing.server
 
     if server is None:
@@ -142,7 +148,7 @@ def summary():
 
     if _received_tensors:
         rich.print("Received tensors:")
-        for name, tensor in _received_tensors.items():
+        for i, (name, tensor) in zip(range(max_items), _received_tensors.items()):
             hist_len = server.store.get_len(name)
             if hist_len > 1:
                 rich.print(f"  {name}: {tensor.shape} (latest, total {hist_len})")
@@ -150,7 +156,7 @@ def summary():
                 rich.print(f"  {name}: {tensor.shape}")
     if _received_strings:
         rich.print("Received strings:")
-        for name, string in _received_strings.items():
+        for i, (name, string) in zip(range(max_items), _received_strings.items()):
             hist_len = server.store.get_len(name)
             excerpt = string[:20] + "..." if len(string) > 20 else ""
             if hist_len > 1:
@@ -159,7 +165,7 @@ def summary():
                 rich.print(f"  {name}: {excerpt}")
     if _received_pytree:
         rich.print("Received pytrees:")
-        for name, pytree in _received_pytree.items():
+        for i, (name, pytree) in zip(range(max_items), _received_pytree.items()):
             hist_len = server.store.get_len(name)
             if hist_len > 1:
                 rich.print(f"  {name} (latest, total {hist_len})")
