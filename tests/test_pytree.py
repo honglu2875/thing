@@ -72,10 +72,10 @@ def _equal(obj, obj2):
 def test_pytree_obj_and_transmission(obj, i):
     root, id_to_leaves = _prepare_pytree_obj(obj)
     obj2 = _reconstruct_pytree_obj(root, id_to_leaves)
-    assert _equal(obj, obj2)
 
+    assert _equal(obj, obj2)
+    client = thing.Client(server_addr="localhost", server_port=2879 + i)
     with thing.Server(port=2879 + i) as server:
-        thing.catch(obj, name="a", server=f"localhost:{2879 + i}")
-        time.sleep(0.2)
+        client.catch(obj, name="a", server=f"localhost:{2879 + i}").result()
         res = server.store.get_object_by_name("a")
         assert _equal(res, obj)

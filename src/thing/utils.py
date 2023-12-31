@@ -11,10 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import functools
 import logging
 import re
 import secrets
 import sys
+import time
 from numbers import Number
 from typing import Optional
 
@@ -25,6 +27,24 @@ from thing.type import (ArrayLike, Object, PyTree, PyTreeObject, StringObject,
                         TensorObject)
 
 _used_hash = set()
+
+
+def retry(num: int, delay: float):
+    def _wrapper(func):
+        @functools.wraps(func)
+        def _retry(*args, **kwargs):
+            last_error = RuntimeError()
+            for _ in range(num):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    time.sleep(delay)
+            raise last_error
+
+        return _retry
+
+    return _wrapper
 
 
 def get_rand_id():
@@ -84,7 +104,6 @@ def _validate_server_name(
 ) -> str | None:
     if not server:
         return None
-
     pattern = re.compile(r"^(?P<host>[^:]+)(:(?P<port>\d+))?$")
     match = pattern.match(server)
     if not match:

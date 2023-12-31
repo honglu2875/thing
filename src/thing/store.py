@@ -6,7 +6,7 @@ from typing import Optional, Union
 
 from thing import thing_pb2
 from thing.type import Object, PyTreeObject, StringObject, TensorObject
-from thing.utils import _reconstruct_pytree_obj
+from thing.utils import _reconstruct_pytree_obj, retry
 
 
 @dataclasses.dataclass
@@ -40,12 +40,14 @@ class Store:
         self._history: list[HistoryRecord] = []
         self._logger = logging.getLogger(__name__)
 
+    @retry(num=2, delay=0.1)
     def _post_process(self, obj):
         if isinstance(obj, thing_pb2.PyTreeNode):
             try:
                 obj = _reconstruct_pytree_obj(obj, self._items)
             except NameError:
-                self._logger.error("The object has not been completely transmitted.")
+                msg = "The object has not been completely transmitted."
+                raise RuntimeError(msg)
         return obj
 
     @staticmethod
@@ -76,11 +78,13 @@ class Store:
         for log in self._history[::-1]:
             yield log
 
+    @retry(num=2, delay=0.1)
     def by_id(self, idx: int) -> Object:
         if idx not in self._items:
             raise KeyError(f"Item with id {idx} does not exist.")
         return self._items[idx]
 
+    @retry(num=2, delay=0.1)
     def by_name(self, name: str, index: int = 0) -> Object:
         if not self._name_to_id[name]:
             raise KeyError(f"Item with name {name} does not exist.")

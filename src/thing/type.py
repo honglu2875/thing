@@ -100,4 +100,7 @@ class Futures:
         self._futures = futures
 
     def result(self, timeout=None):
-        return [f.result(timeout=timeout) for f in self._futures]
+        return [
+            f.result(timeout=timeout) if isinstance(f, (Future, Futures)) else f
+            for f in self._futures
+        ]

@@ -13,9 +13,11 @@
 # limitations under the License.
 import contextlib
 import ctypes
+import inspect
 import logging
+import re
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from numbers import Number
 from typing import Any, Optional
 
@@ -59,16 +61,20 @@ class ThingClient:
         self._logger.setLevel(logging_level)
         self._chunk_size = chunk_size
 
-        self.server_available = None
+        self._server_availability = {}
         self._thread_pool = ThreadPoolExecutor()
 
-        self._every_counter = defaultdict(
-            lambda: 0
-        )  # implement `.catch(..., every=k)` by keeping track of the counter
+        # implement `.catch(..., every=k)` by keeping track of the counter
+        self._every_counter = defaultdict(lambda: 0)
 
-    def _test_server(self) -> bool:
-        with self._set_channel_stub() as stub:
-            server = self._server_addr + ":" + self._server_port
+        # used for `self._parse_var_name`
+        # e.g. `self._var_name_counter["v"] = 1, the next `v` from a different location
+        #      will be called `v_2``
+        self._var_name_counter = defaultdict(lambda: 0)
+        self._scope_info_to_vars = defaultdict(dict)
+
+    def _test_server(self, server: str) -> bool:
+        with self._set_channel_stub(server) as stub:
             try:
                 response = stub.HealthCheck(
                     thing_pb2.HealthCheckRequest(), timeout=self._timeout
@@ -91,6 +97,43 @@ class ThingClient:
         _channel = grpc.insecure_channel(server)
         _stub = thing_pb2_grpc.ThingStub(_channel)
         yield _stub
+
+    def _parse_var_name(self, prev_frame: inspect.FrameInfo) -> Optional[str]:
+        """Parse the variable name from the trace info.
+
+        Note that in different local scopes, variable names can easily collide.
+        The way I do here is to use the previous function names and file location
+        as the hash. If variables from different functions or defined in different
+        files have the same name, we append "_1", "_2", ...
+        Args:
+            frame (inspect.FrameInfo):
+        Returns:
+            a unique VarName object based on the full trace of frame info
+        """
+        # Assume the current scope was `self.catch`, we start from the second
+        scope_info = f"{prev_frame.filename}-{prev_frame.function}"
+
+        if not prev_frame.code_context:
+            return None
+        context = prev_frame.code_context[0]
+        match = re.search(r"catch\( *([^,\) ]*)", context)
+        if not match:
+            return None
+        root_name = match.group(1).replace(".", "_")
+
+        if root_name not in self._scope_info_to_vars[scope_info]:
+            # If the variable root name is new to the previous scope
+            if self._var_name_counter[root_name] > 0:
+                var_name = f"{root_name}_{self._var_name_counter[root_name]}"
+            else:
+                var_name = root_name
+            self._var_name_counter[root_name] += 1
+            self._scope_info_to_vars[scope_info][root_name] = var_name
+        else:
+            # If under the previous scope, a variable with the same root is already captured
+            var_name = self._scope_info_to_vars[scope_info][root_name]
+
+        return var_name
 
     def _catch(
         self,
@@ -165,20 +208,22 @@ class ThingClient:
 
         return True
 
-    def _catch_pytree_structure(self, root, server: Optional[str] = None) -> bool:
-        try:
-            with self._set_channel_stub(server) as stub:
-                response = stub.CatchPyTree(
-                    root,
-                    timeout=self._timeout,
-                )
-                if response.status != thing_pb2.STATUS.SUCCESS:
-                    return False
-        except Exception as e:
-            self._logger.error(f"Error when sending pytree structure: {e}")
-            return False
+    def _catch_pytree_structure(self, root, server: Optional[str] = None) -> Future:
+        def _fn():
+            try:
+                with self._set_channel_stub(server) as stub:
+                    response = stub.CatchPyTree(
+                        root,
+                        timeout=self._timeout,
+                    )
+                    if response.status != thing_pb2.STATUS.SUCCESS:
+                        return False
+            except Exception as e:
+                self._logger.error(f"Error when sending pytree structure: {e}")
+                return False
+            return True
 
-        return True
+        return self._thread_pool.submit(_fn)
 
     def _catch_torch(
         self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
@@ -217,18 +262,19 @@ class ThingClient:
             if isinstance(obj, Number):
                 obj = np.array(obj)
 
-            # Sacrifice a little type-check robustness to avoid unnecessary imports
+            # Sacrifice type-check robustness to avoid unnecessary imports
+            _class_str_to_fn = {
+                # Numpy array naming should be stable enough
+                "<class 'numpy.ndarray'>": self._catch_numpy,
+                # Torch array naming is also considered stable
+                "<class 'torch.Tensor'>": self._catch_torch,
+                # However, I am a bit worried about JAX...
+                "<class 'jaxlib.xla_extension.ArrayImpl'>": self._catch_jax,
+            }
             if isinstance(obj, str):
                 _fn = self._catch_string
-            # Numpy array naming should be stable enough
-            elif str(obj.__class__) == "<class 'numpy.ndarray'>":
-                _fn = self._catch_numpy
-            # Torch tensor naming should be stable enough
-            elif str(obj.__class__) == "<class 'torch.Tensor'>":
-                _fn = self._catch_torch
-            # May not be robust since JAX makes changes frequently
-            elif "ArrayImpl" in str(obj.__class__):
-                _fn = self._catch_jax
+            elif str(obj.__class__) in _class_str_to_fn:
+                _fn = _class_str_to_fn[str(obj.__class__)]
             else:
                 self._logger.error(f"Unsupported array type {obj.__class__}")
                 continue
@@ -268,35 +314,48 @@ class ThingClient:
             decide whether to block on the future or not.
             If the server is not available, it will return None.
         """
-        if obj is None:
-            return None
-        server = _validate_server_name(server, self._logger)
-        if (
-            self.server_available is None and not server
-        ):  # Ping the default server on the first call
-            self.server_available = self._test_server()
+        # None will show up as empty string in the recipient server
+        obj = "" if obj is None else obj
 
-        if not self.server_available and not server:
+        server = _validate_server_name(server, self._logger) or self.target_server
+        # Ping server on the first call
+        if server not in self._server_availability:
+            self._server_availability[server] = self._test_server(server)
+        # If first ping was unsuccessful, make everything no-op to avoid overhead
+        if not self._server_availability[server]:
             return None
 
-        if name is not None and every > 1:
-            self._every_counter[name] += 1
-            if self._every_counter[name] % every != 0:
-                return None
+        # Use either specified name or its own from the outer scope
+        # (see docs of `self._parse_var_name`)
+        name = name or self._parse_var_name(
+            inspect.getframeinfo(inspect.currentframe().f_back)
+        )
+        # If parsing fails, we use the memory address as name
+        name = name or f"p_{id(obj)}"
+
+        self._every_counter[name] += 1
+        if every > 1 and self._every_counter[name] % every != 0:
+            return None
 
         if obj is None or isinstance(obj, (tuple, list, dict)):
+            # Parse a tuple/list/dict as a PyTree object
             root, id_to_leaves = _prepare_pytree_obj(obj, name=name)
             ids = []
             objects = []
             for k, v in id_to_leaves.items():
                 ids.append(k)
                 objects.append(v)
-            # todo: how to assign names for intermediate nodes?
+            # fixme: how to assign names for intermediate nodes?
             names = [None] * len(ids)
-            self._catch_tensors_and_strings(ids, objects, names, server=server)
 
-            # Send the pytree object structure
-            self._catch_pytree_structure(root, server=server)
+            return Futures(
+                [
+                    # Send all the leaves first
+                    self._catch_tensors_and_strings(ids, objects, names, server=server),
+                    # Send the pytree object structure
+                    self._catch_pytree_structure(root, server=server),
+                ]
+            )
         else:
             return self._catch_tensors_and_strings(
                 [get_rand_id()], [obj], [name], server=server
