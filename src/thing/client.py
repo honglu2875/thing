@@ -19,13 +19,13 @@ import re
 from collections import defaultdict
 from concurrent.futures import Future, ThreadPoolExecutor
 from numbers import Number
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import grpc
 import numpy as np
 
 from thing import thing_pb2, thing_pb2_grpc
-from thing.type import Futures
+from thing.type import ArrayLike, Awaitable
 from thing.utils import (_numpy_dtypes, _prepare_pytree_obj,
                          _validate_server_name, get_rand_id)
 
@@ -60,9 +60,9 @@ class ThingClient:
         self._logger = logger or logging.getLogger(__name__)
         self._logger.setLevel(logging_level)
         self._chunk_size = chunk_size
+        self._thread_pool = ThreadPoolExecutor()
 
         self._server_availability = {}
-        self._thread_pool = ThreadPoolExecutor()
 
         # implement `.catch(..., every=k)` by keeping track of the counter
         self._every_counter = defaultdict(lambda: 0)
@@ -112,7 +112,6 @@ class ThingClient:
         """
         # Assume the current scope was `self.catch`, we start from the second
         scope_info = f"{prev_frame.filename}-{prev_frame.function}"
-
         if not prev_frame.code_context:
             return None
         context = prev_frame.code_context[0]
@@ -135,7 +134,7 @@ class ThingClient:
 
         return var_name
 
-    def _catch(
+    def _catch_obj(
         self,
         idx: int,
         array: np.ndarray,
@@ -208,82 +207,148 @@ class ThingClient:
 
         return True
 
-    def _catch_pytree_structure(self, root, server: Optional[str] = None) -> Future:
-        def _fn():
-            try:
-                with self._set_channel_stub(server) as stub:
-                    response = stub.CatchPyTree(
-                        root,
-                        timeout=self._timeout,
-                    )
-                    if response.status != thing_pb2.STATUS.SUCCESS:
-                        return False
-            except Exception as e:
-                self._logger.error(f"Error when sending pytree structure: {e}")
-                return False
-            return True
-
-        return self._thread_pool.submit(_fn)
+    def _catch_pytree_structure(
+        self,
+        id: int,
+        root: thing_pb2.PyTreeNode,
+        name: Optional[str] = None,
+        server: Optional[str] = None,
+    ) -> bool:
+        try:
+            with self._set_channel_stub(server) as stub:
+                response = stub.CatchPyTree(
+                    root,
+                    timeout=self._timeout,
+                )
+                if response.status != thing_pb2.STATUS.SUCCESS:
+                    return False
+        except Exception as e:
+            self._logger.error(f"Error when sending pytree structure: {e}")
+            return False
+        return True
 
     def _catch_torch(
-        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
+        self,
+        idx: int,
+        array: ArrayLike,
+        name: Optional[str] = None,
+        server: Optional[str] = None,
     ) -> bool:
         # We have to unfortunately detach and offload the array to CPU which may cause a sync
         array = array.detach().cpu().numpy(force=False)  # force=False to avoid a copy
-        return self._catch(
+        return self._catch_obj(
             idx, array, name=name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
         )
 
     def _catch_jax(
-        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
+        self,
+        idx: int,
+        array: ArrayLike,
+        name: Optional[str] = None,
+        server: Optional[str] = None,
     ) -> bool:
         array = np.array(array, copy=False)
-        return self._catch(
+        return self._catch_obj(
             idx, array, name=name, framework=thing_pb2.FRAMEWORK.JAX, server=server
         )
 
     def _catch_numpy(
-        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
+        self,
+        idx: int,
+        array: ArrayLike,
+        name: Optional[str] = None,
+        server: Optional[str] = None,
     ) -> bool:
-        return self._catch(
+        return self._catch_obj(
             idx, array, name=name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
         )
 
-    def _catch_tensors_and_strings(
+    def _async_catch_objects(
         self,
         ids: list[int],
         objects: list,
         names: list[Optional[str]],
         server: Optional[str] = None,
-    ) -> Futures:
+    ) -> bool:
+        """Send a batch of objects asynchronously."""
         futures = []
-        for idx, obj, name in zip(ids, objects, names):
-            # For scalars, default to numpy array with shape ()
-            if isinstance(obj, Number):
-                obj = np.array(obj)
+        with ThreadPoolExecutor(len(ids)) as pool:
+            for idx, obj, name in zip(ids, objects, names):
+                # For scalars, default to numpy array with shape ()
+                if isinstance(obj, Number):
+                    obj = np.array(obj)
 
-            # Sacrifice type-check robustness to avoid unnecessary imports
-            _class_str_to_fn = {
-                # Numpy array naming should be stable enough
-                "<class 'numpy.ndarray'>": self._catch_numpy,
-                # Torch array naming is also considered stable
-                "<class 'torch.Tensor'>": self._catch_torch,
-                # However, I am a bit worried about JAX...
-                "<class 'jaxlib.xla_extension.ArrayImpl'>": self._catch_jax,
-            }
-            if isinstance(obj, str):
-                _fn = self._catch_string
-            elif str(obj.__class__) in _class_str_to_fn:
-                _fn = _class_str_to_fn[str(obj.__class__)]
-            else:
-                self._logger.error(f"Unsupported array type {obj.__class__}")
-                continue
+                # Sacrifice type-check robustness to avoid unnecessary imports
+                _class_str_to_fn = {
+                    # Numpy array naming should be stable enough
+                    "<class 'numpy.ndarray'>": self._catch_numpy,
+                    # Torch array naming is also considered stable
+                    "<class 'torch.Tensor'>": self._catch_torch,
+                    # However, I am a bit worried about JAX...
+                    "<class 'jaxlib.xla_extension.ArrayImpl'>": self._catch_jax,
+                }
+                if isinstance(obj, str):
+                    _fn = self._catch_string
+                elif isinstance(obj, thing_pb2.PyTreeNode):
+                    _fn = self._catch_pytree_structure
+                elif str(obj.__class__) in _class_str_to_fn:
+                    _fn = _class_str_to_fn[str(obj.__class__)]
+                else:
+                    self._logger.error(f"Unsupported array type {obj.__class__}")
+                    continue
 
-            futures.append(
-                self._thread_pool.submit(_fn, idx, obj, name=name, server=server)
+                futures.append(pool.submit(_fn, idx, obj, name=name, server=server))
+
+        return all(f.result() for f in futures)
+
+    def _catch(
+        self,
+        obj: Any,
+        name: Optional[str] = None,
+        past_frame: Optional[Any] = None,
+        server: Optional[str] = None,
+        every: int = 1,
+    ) -> bool:
+        """The inner synchronous call of `.catch`"""
+        # None will show up as empty string in the recipient server
+        obj = "" if obj is None else obj
+
+        server = _validate_server_name(server, self._logger) or self.target_server
+        # Ping server on the first call
+        if server not in self._server_availability:
+            self._server_availability[server] = self._test_server(server)
+        # If first ping was unsuccessful, make everything no-op to avoid overhead
+        if not self._server_availability[server]:
+            return None
+
+        if past_frame is not None:
+            name = name or self._parse_var_name(inspect.getframeinfo(past_frame))
+        # If parsing fails, we use the memory address as name
+        name = name or f"p_{id(obj)}"
+
+        self._every_counter[name] += 1
+        if every > 1 and self._every_counter[name] % every != 0:
+            return None
+
+        if obj is None or isinstance(obj, (tuple, list, dict)):
+            # Parse a tuple/list/dict as a PyTree object
+            root, id_to_leaves = _prepare_pytree_obj(obj, name=name)
+            ids, objects, names = [], [], []
+            # Send all the leaves first
+            for k, v in id_to_leaves.items():
+                ids.append(k)
+                objects.append(v)
+                # Intermediate nodes do not have names
+                names.append(None)
+            # Send the pytree object structure
+            ids.append(root.id)
+            objects.append(root)
+            names.append(None)
+            return self._async_catch_objects(ids, objects, names, server=server)
+        else:
+            return self._async_catch_objects(
+                [get_rand_id()], [obj], [name], server=server
             )
-
-        return Futures(futures)
 
     def catch(
         self,
@@ -291,7 +356,7 @@ class ThingClient:
         name: Optional[str] = None,
         server: Optional[str] = None,
         every: int = 1,
-    ) -> Optional[Futures]:
+    ) -> Awaitable:
         """
         Catch an array.
         Args:
@@ -310,56 +375,24 @@ class ThingClient:
             every: catch every `every`-th array. The array MUST have a name, or
                 it will be ignored.
         Returns:
-            The future object for the request. It will be up to the user to
-            decide whether to block on the future or not.
-            If the server is not available, it will return None.
+            An `Awaitable` object (see `thing.type`).
+            Two types of usage:
+              - `thing.catch(x).wait()` to wait for the execution successfulness.
+              - `thing.catch(x)` to only send the payloads without waiting.
         """
-        # None will show up as empty string in the recipient server
-        obj = "" if obj is None else obj
-
-        server = _validate_server_name(server, self._logger) or self.target_server
-        # Ping server on the first call
-        if server not in self._server_availability:
-            self._server_availability[server] = self._test_server(server)
-        # If first ping was unsuccessful, make everything no-op to avoid overhead
-        if not self._server_availability[server]:
-            return None
-
         # Use either specified name or its own from the outer scope
         # (see docs of `self._parse_var_name`)
-        name = name or self._parse_var_name(
-            inspect.getframeinfo(inspect.currentframe().f_back)
+        past_frame = inspect.currentframe().f_back
+        return Awaitable(
+            self._thread_pool.submit(
+                self._catch,
+                obj,
+                past_frame=past_frame,
+                name=name,
+                server=server,
+                every=every,
+            )
         )
-        # If parsing fails, we use the memory address as name
-        name = name or f"p_{id(obj)}"
-
-        self._every_counter[name] += 1
-        if every > 1 and self._every_counter[name] % every != 0:
-            return None
-
-        if obj is None or isinstance(obj, (tuple, list, dict)):
-            # Parse a tuple/list/dict as a PyTree object
-            root, id_to_leaves = _prepare_pytree_obj(obj, name=name)
-            ids = []
-            objects = []
-            for k, v in id_to_leaves.items():
-                ids.append(k)
-                objects.append(v)
-            # fixme: how to assign names for intermediate nodes?
-            names = [None] * len(ids)
-
-            return Futures(
-                [
-                    # Send all the leaves first
-                    self._catch_tensors_and_strings(ids, objects, names, server=server),
-                    # Send the pytree object structure
-                    self._catch_pytree_structure(root, server=server),
-                ]
-            )
-        else:
-            return self._catch_tensors_and_strings(
-                [get_rand_id()], [obj], [name], server=server
-            )
 
     @property
     def target_server(self):
@@ -371,5 +404,5 @@ class ThingClient:
         self._server_port = target.split(":")[1]
 
     def __del__(self):
-        if self._thread_pool:
+        if self._thread_pool is not None:
             self._thread_pool.shutdown(wait=True)

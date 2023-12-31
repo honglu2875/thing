@@ -95,12 +95,14 @@ class PyTreeObject(Object):
     ...
 
 
-class Futures:
-    def __init__(self, futures: list[Future]):
-        self._futures = futures
+class Awaitable:
+    """A wrapper around Future object.
 
-    def result(self, timeout=None):
-        return [
-            f.result(timeout=timeout) if isinstance(f, (Future, Futures)) else f
-            for f in self._futures
-        ]
+    Mainly for cosmetic: one can call `thing.catch(v).wait()` to wait for the result.
+    """
+
+    def __init__(self, future: Future):
+        self._future = future
+
+    def wait(self):
+        return self._future.result()

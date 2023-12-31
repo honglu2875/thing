@@ -76,6 +76,6 @@ def test_pytree_obj_and_transmission(obj, i):
     assert _equal(obj, obj2)
     client = thing.Client(server_addr="localhost", server_port=2879 + i)
     with thing.Server(port=2879 + i) as server:
-        client.catch(obj, name="a", server=f"localhost:{2879 + i}").result()
+        client.catch(obj, name="a", server=f"localhost:{2879 + i}").wait()
         res = server.store.get_object_by_name("a")
         assert _equal(res, obj)
