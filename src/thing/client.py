@@ -106,9 +106,10 @@ class ThingClient:
         as the hash. If variables from different functions or defined in different
         files have the same name, we append "_1", "_2", ...
         Args:
-            frame (inspect.FrameInfo):
+            prev_frame (inspect.FrameInfo):
         Returns:
-            a unique VarName object based on the full trace of frame info
+            a unique variable name based on the full trace of frame info.
+            None if the previous frame is invalid.
         """
         # Assume the current scope was `self.catch`, we start from the second
         scope_info = f"{prev_frame.filename}-{prev_frame.function}"
@@ -134,7 +135,7 @@ class ThingClient:
 
         return var_name
 
-    def _catch_obj(
+    def _catch_array(
         self,
         idx: int,
         array: np.ndarray,
@@ -143,7 +144,10 @@ class ThingClient:
         framework=thing_pb2.FRAMEWORK.NUMPY,
     ) -> bool:
         """
-        The core of array catching. It only receives a numpy array (already converted from torch or jax),
+        The core of array catching. It underlies the `_catch_numpy`, `_catch_torch`,
+        and `_catch_jax` calls.
+
+        It only receives a numpy array (already converted from torch or jax),
         and sends it to the server in bytes and in chunks without creating copies.
         """
         if array.dtype.name in _numpy_dtypes:
@@ -207,7 +211,7 @@ class ThingClient:
 
         return True
 
-    def _catch_pytree_structure(
+    def _catch_pytree_schema(
         self,
         id: int,
         root: thing_pb2.PyTreeNode,
@@ -223,7 +227,7 @@ class ThingClient:
                 if response.status != thing_pb2.STATUS.SUCCESS:
                     return False
         except Exception as e:
-            self._logger.error(f"Error when sending pytree structure: {e}")
+            self._logger.error(f"Error when sending pytree schema: {e}")
             return False
         return True
 
@@ -236,7 +240,7 @@ class ThingClient:
     ) -> bool:
         # We have to unfortunately detach and offload the array to CPU which may cause a sync
         array = array.detach().cpu().numpy(force=False)  # force=False to avoid a copy
-        return self._catch_obj(
+        return self._catch_array(
             idx, array, name=name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
         )
 
@@ -248,7 +252,7 @@ class ThingClient:
         server: Optional[str] = None,
     ) -> bool:
         array = np.array(array, copy=False)
-        return self._catch_obj(
+        return self._catch_array(
             idx, array, name=name, framework=thing_pb2.FRAMEWORK.JAX, server=server
         )
 
@@ -259,7 +263,7 @@ class ThingClient:
         name: Optional[str] = None,
         server: Optional[str] = None,
     ) -> bool:
-        return self._catch_obj(
+        return self._catch_array(
             idx, array, name=name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
         )
 
@@ -290,7 +294,7 @@ class ThingClient:
                 if isinstance(obj, str):
                     _fn = self._catch_string
                 elif isinstance(obj, thing_pb2.PyTreeNode):
-                    _fn = self._catch_pytree_structure
+                    _fn = self._catch_pytree_schema
                 elif str(obj.__class__) in _class_str_to_fn:
                     _fn = _class_str_to_fn[str(obj.__class__)]
                 else:
@@ -321,8 +325,10 @@ class ThingClient:
         if not self._server_availability[server]:
             return None
 
-        if past_frame is not None:
-            name = name or self._parse_var_name(inspect.getframeinfo(past_frame))
+        if past_frame is not None and name is None:
+            # `inspect.getframeinfo` is expensive! We are fine if calls are sparse.
+            # But ideally, specifying a name would avoid this..
+            name = self._parse_var_name(inspect.getframeinfo(past_frame))
         # If parsing fails, we use the memory address as name
         name = name or f"p_{id(obj)}"
 
@@ -358,31 +364,41 @@ class ThingClient:
         every: int = 1,
     ) -> Awaitable:
         """
-        Catch an array.
+        Catch a supported object.
+
         Args:
             obj: the object to be caught. It can be
                 - a numpy array
                 - a torch tensor
                 - a jax array
+                - an int/float (will be converted to numpy)
                 - a list or tuple
                 - a dict
                 - a string
-                We however do not import any of these libraries to avoid overhead.
-            name: the name of the variable. If not provided, it will be None.
-                In the case of None, the logger will refer to it as "<noname>".
+                - None (will be converted to empty string)
+                We however do not import any extra libraries to avoid overhead.
+            name: the name of the variable. If not provided, it will:
+                - Try to trace to the previous scope and attempt to capture the
+                  variable name. Same variable names from different functions
+                  will be separated by appending `_1`, `_2`, etc.
+                - If failed, the variable name becomes `p_` followed by its pointer
+                  address.
             server: a custom server address and port if different from default.
                 Must be in the form of "[address]:[port]".
-            every: catch every `every`-th array. The array MUST have a name, or
-                it will be ignored.
+            every: catch every `every`-th array.
         Returns:
             An `Awaitable` object (see `thing.type`).
             Two types of usage:
               - `thing.catch(x).wait()` to wait for the execution successfulness.
               - `thing.catch(x)` to only send the payloads without waiting.
         """
-        # Use either specified name or its own from the outer scope
-        # (see docs of `self._parse_var_name`)
+        # Capture the previous frame before entering a thread pool
+        # This incurs almost zero overhead.
         past_frame = inspect.currentframe().f_back
+        # Note:
+        #   There is a `inspect.getframeinfo` call inside `self._catch`. This incurs
+        #   big overhead as it will perform an I/O. Must hide the latency inside a
+        #   thread pool. Or, if the `name` argument is given, this will not be called.
         return Awaitable(
             self._thread_pool.submit(
                 self._catch,

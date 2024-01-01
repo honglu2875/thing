@@ -26,70 +26,69 @@ for i in range(100):
     optimizer.step()  # you applied your gradient
     
     # Now, it's show time:
-    thing.catch(loss, name='loss', every=10)
+    thing.catch(loss, every=10)
     thing.catch(model.lm_head.weight, name='lm_head_weight', every=10)
 
 ... # your rest of the codes
 ```
 
-## Server: receive and interact
-
-Once the client is set up, in a separate python REPL or jupyter notebook, you can do
-
-```python
-import thing
-
-thing.serve()
+On another interactive python REPL, try
 ```
-to spin up a server that listens to the client captures.
+>>> import thing
+>>> thing.serve()
+```
+Once you received the captures, try
+```
+>>> print(thing.get('lm_head_weight'))
+>>> print(thing.get('loss'))
+```
+to obtain the captured tensor in your server session. You can apply whatever transformation you want to investigate further.
 
-Once a tensor is received, you can play with it. 
+## Server APIs: receive and interact
+
+In the separate python REPL or jupyter notebook, other than `.get`, there are a few other APIs.
 
 ### help()
 
-First of all, the rest of the API can be seen when running `thing.help()`.
+First of all, a full list of the APIs can be seen by doing `thing.help()`. I will not provide the full list here in this README.
+
+### ingest_all()
+
+Directly put all named variables inside your current scope. Meaning:
+
+Say you did `thing.catch(loss)` on the training session. In the interactive session, you could do
+```
+>>> thing.serve()
+2024-01-01 01:11:18,914 - thing.interactive - INFO     - Server started at port 2875.
+>>> thing.ingest_all()
+>>> loss
+```
+You will see the `loss` variable by directly calling like the above.
 
 ### status()
 
-`thing.status()` will show you the current status with a spinner, but you don't need to run this in order to receive the tensors.
+`thing.status()` will show you the current status with a spinner, but *you don't need to run this in order to receive the tensors*.
 
 ### summary()
 
 ```python
 thing.summary()
 ```
-organize the recent capture logs.
+print the recent capture logs.
 
-If you received the captures, try, for example,
-
-```python
-import thing
-
-thing.get('lm_head_weight')
-```
-to obtain the captured tensor in your server session. It will not affect your training code and you can apply
-whatever transformation you want to investigate further.
-
-
-# Some use cases
-Here is a screenshot when I was debugging FSDP. Just inserted some `thing.catch(...)` in the fsdp code and
-captured some scalar tensors right after the all-gather.
-![debug](assets/example.png)
 
 # FAQ
 - Q: Why not logging?
 
-  A: Logging is great for standardized metrics and quantities. But in the case of debugging and research, there is 
+  A: Logging is great if we know what metrics we are looking. But in the case of debugging and research, there is 
   data (especially big tensors such as layer weights) that we prefer to interactively explore in a separate persistent
   session.
-  Several examples of my own use cases:
+  A few examples of my own use cases:
 
   - Debugging a model implementation. Quickly catching intermediate variables, keep them in a persistent python
     session, check the shapes and do some sanity tests.
+  - Debugging distributed training (FSDP, etc). Just send stuff to a fixed ip.
   - Silently catch the hidden states in a continuous training/inference job for some quick analysis.
-  - Spin up a high-mem instance and receive model weights from an experimental training job. A small experiment can
-    easily generate terabytes of checkpoints, and I'd rather put them on RAM for quick studies than saving
-    to disk/pushing to blob storage.
   
 - Q: Why not using pickle?
 
@@ -104,9 +103,14 @@ captured some scalar tensors right after the all-gather.
   - Try to set the environment variable `THING_SERVER=<your-own-ip>`.
   - In the client, specify `thing.catch(..., server='<your-ip>:<your-port>')`
 
-- Q: What's the point of naming in: `.catch(..., name='...')`?
+- Q: Does it work without specifying a name (such as calling `thing.catch(loss)`)?
+
+  A: Yes. You will see on the other side by calling `thing.get("loss")`.
+
+- Q: What's the point of specifying a name in: `.catch(..., name='...')`?
 
   A: A few things:
-  - A name is not supposed to be a unique identifier of a transmission.
+  - A name is **NOT** supposed to be a unique identifier of a transmission.
   - Several transmissions under the same name will have a chain of history on the server.
   - `thing.get_all(name)` returns a list of tensors, from oldest to latest.
+  - By specifying a name, it avoids an expensive I/O to trace the variable name from the previous scope.
