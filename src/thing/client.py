@@ -26,7 +26,9 @@ import numpy as np
 
 from thing import thing_pb2, thing_pb2_grpc
 from thing.type import ArrayLike, Awaitable
-from thing.utils import (_numpy_dtypes, _prepare_pytree_obj,
+from thing.utils import (_get_framework, _is_tensor, _numpy_dtypes,
+                         _prepare_array, _prepare_pytree_obj, _prepare_string,
+                         _to_bytes_no_copy, _to_numpy_no_copy,
                          _validate_server_name, get_rand_id)
 
 
@@ -138,10 +140,9 @@ class ThingClient:
     def _catch_array(
         self,
         idx: int,
-        array: np.ndarray,
+        array: ArrayLike,
         name: Optional[str] = None,
         server: Optional[str] = None,
-        framework=thing_pb2.FRAMEWORK.NUMPY,
     ) -> bool:
         """
         The core of array catching. It underlies the `_catch_numpy`, `_catch_torch`,
@@ -150,14 +151,16 @@ class ThingClient:
         It only receives a numpy array (already converted from torch or jax),
         and sends it to the server in bytes and in chunks without creating copies.
         """
+        framework = _get_framework(array)
+        array = _to_numpy_no_copy(array, framework)
+
         if array.dtype.name in _numpy_dtypes:
             dtype = _numpy_dtypes[array.dtype.name]
         else:
             self._logger.error(f"Unsupported dtype {array.dtype}")
             return False
 
-        # Use ctypes instead of `array.tobytes()` to avoid creating a copy
-        data = (ctypes.c_char * array.nbytes).from_address(array.ctypes.data).raw
+        data = _to_bytes_no_copy(array)
 
         try:
             with self._set_channel_stub(server) as stub:
@@ -170,13 +173,13 @@ class ThingClient:
                         f"Chunk {i // self._chunk_size} of {len(data) // self._chunk_size}."
                     )
                     response = stub.CatchArray(
-                        thing_pb2.Array(
-                            id=idx,
-                            var_name=name,
+                        _prepare_array(
+                            data[i : i + self._chunk_size],
+                            idx=idx,
+                            name=name,
                             shape=array.shape,
                             dtype=dtype,
                             framework=framework,
-                            data=data[i : i + self._chunk_size],
                             chunk_id=None if singleton else i // self._chunk_size,
                             num_chunks=None if singleton else num_chunks,
                         ),
@@ -191,16 +194,12 @@ class ThingClient:
         return True
 
     def _catch_string(
-        self, idx: int, array, name: Optional[str] = None, server: Optional[str] = None
+        self, idx: int, string, name: Optional[str] = None, server: Optional[str] = None
     ) -> bool:
         try:
             with self._set_channel_stub(server) as stub:
                 response = stub.CatchString(
-                    thing_pb2.String(
-                        id=idx,
-                        var_name=name,
-                        data=array,
-                    ),
+                    _prepare_string(string, idx=idx, name=name),
                     timeout=self._timeout,
                 )
                 if response.status != thing_pb2.STATUS.SUCCESS:
@@ -231,42 +230,6 @@ class ThingClient:
             return False
         return True
 
-    def _catch_torch(
-        self,
-        idx: int,
-        array: ArrayLike,
-        name: Optional[str] = None,
-        server: Optional[str] = None,
-    ) -> bool:
-        # We have to unfortunately detach and offload the array to CPU which may cause a sync
-        array = array.detach().cpu().numpy(force=False)  # force=False to avoid a copy
-        return self._catch_array(
-            idx, array, name=name, framework=thing_pb2.FRAMEWORK.TORCH, server=server
-        )
-
-    def _catch_jax(
-        self,
-        idx: int,
-        array: ArrayLike,
-        name: Optional[str] = None,
-        server: Optional[str] = None,
-    ) -> bool:
-        array = np.array(array, copy=False)
-        return self._catch_array(
-            idx, array, name=name, framework=thing_pb2.FRAMEWORK.JAX, server=server
-        )
-
-    def _catch_numpy(
-        self,
-        idx: int,
-        array: ArrayLike,
-        name: Optional[str] = None,
-        server: Optional[str] = None,
-    ) -> bool:
-        return self._catch_array(
-            idx, array, name=name, framework=thing_pb2.FRAMEWORK.NUMPY, server=server
-        )
-
     def _async_catch_objects(
         self,
         ids: list[int],
@@ -282,21 +245,12 @@ class ThingClient:
                 if isinstance(obj, Number):
                     obj = np.array(obj)
 
-                # Sacrifice type-check robustness to avoid unnecessary imports
-                _class_str_to_fn = {
-                    # Numpy array naming should be stable enough
-                    "<class 'numpy.ndarray'>": self._catch_numpy,
-                    # Torch array naming is also considered stable
-                    "<class 'torch.Tensor'>": self._catch_torch,
-                    # However, I am a bit worried about JAX...
-                    "<class 'jaxlib.xla_extension.ArrayImpl'>": self._catch_jax,
-                }
                 if isinstance(obj, str):
                     _fn = self._catch_string
                 elif isinstance(obj, thing_pb2.PyTreeNode):
                     _fn = self._catch_pytree_schema
-                elif str(obj.__class__) in _class_str_to_fn:
-                    _fn = _class_str_to_fn[str(obj.__class__)]
+                elif _is_tensor(obj):
+                    _fn = self._catch_array
                 else:
                     self._logger.error(f"Unsupported array type {obj.__class__}")
                     continue
@@ -327,7 +281,7 @@ class ThingClient:
 
         if past_frame is not None and name is None:
             # `inspect.getframeinfo` is expensive! We are fine if calls are sparse.
-            # But ideally, specifying a name would avoid this..
+            # But ideally, specifying a name would avoid this.
             name = self._parse_var_name(inspect.getframeinfo(past_frame))
         # If parsing fails, we use the memory address as name
         name = name or f"p_{id(obj)}"
@@ -396,7 +350,7 @@ class ThingClient:
         # This incurs almost zero overhead.
         past_frame = inspect.currentframe().f_back
         # Note:
-        #   There is a `inspect.getframeinfo` call inside `self._catch`. This incurs
+        #   There is an `inspect.getframeinfo` call inside `self._catch`. This incurs
         #   big overhead as it will perform an I/O. Must hide the latency inside a
         #   thread pool. Or, if the `name` argument is given, this will not be called.
         return Awaitable(

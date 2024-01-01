@@ -15,6 +15,7 @@ def test_vars():
         client.catch(obj, server="localhost:8123").wait()
         res = server.store.get_object_by_name("obj")
         assert res == obj
+        time.sleep(0.1)
         obj = 2
         client.catch(obj, server="localhost:8123").wait()
         res = server.store.get_object_by_name("obj")

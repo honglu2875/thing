@@ -37,7 +37,7 @@ On another interactive python REPL, try
 >>> import thing
 >>> thing.serve()
 ```
-Once you received the captures, try
+Once you receive the captures, try
 ```
 >>> print(thing.get('lm_head_weight'))
 >>> print(thing.get('loss'))
@@ -71,10 +71,7 @@ You will see the `loss` variable by directly calling like the above.
 
 ### summary()
 
-```python
-thing.summary()
-```
-print the recent capture logs.
+`thing.summary()` prints the recent capture logs.
 
 
 # FAQ
