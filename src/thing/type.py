@@ -58,7 +58,7 @@ class Object:
         timestamp: Optional[int] = None,
     ):
         """
-        Reconstruct a Object from a protobuf (for the metadata) and a fully reconstructed array.
+        Reconstruct an Object from a protobuf (for the metadata) and a fully reconstructed array.
 
         Args:
             proto: the protobuf containing the metadata.

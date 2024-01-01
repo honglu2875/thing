@@ -66,8 +66,8 @@ class ThingClient:
 
         self._server_availability = {}
 
-        # implement `.catch(..., every=k)` by keeping track of the counter
-        self._every_counter = defaultdict(lambda: 0)
+        # implement `.catch(..., every=k, first=n)` by keeping track of the counter
+        self._obj_counter = defaultdict(lambda: 0)
 
         # used for `self._parse_var_name`
         # e.g. `self._var_name_counter["v"] = 1, the next `v` from a different location
@@ -266,6 +266,7 @@ class ThingClient:
         past_frame: Optional[Any] = None,
         server: Optional[str] = None,
         every: int = 1,
+        first: Optional[int] = None,
     ) -> bool:
         """The inner synchronous call of `.catch`"""
         # None will show up as empty string in the recipient server
@@ -286,8 +287,10 @@ class ThingClient:
         # If parsing fails, we use the memory address as name
         name = name or f"p_{id(obj)}"
 
-        self._every_counter[name] += 1
-        if every > 1 and self._every_counter[name] % every != 0:
+        self._obj_counter[name] += 1
+        if every > 1 and self._obj_counter[name] % every != 0:
+            return None
+        if first is not None and 0 < first < self._obj_counter[name]:
             return None
 
         if obj is None or isinstance(obj, (tuple, list, dict)):
@@ -316,6 +319,7 @@ class ThingClient:
         name: Optional[str] = None,
         server: Optional[str] = None,
         every: int = 1,
+        first: Optional[int] = None,
     ) -> Awaitable:
         """
         Catch a supported object.
@@ -339,7 +343,8 @@ class ThingClient:
                   address.
             server: a custom server address and port if different from default.
                 Must be in the form of "[address]:[port]".
-            every: catch every `every`-th array.
+            every: only catch every `n`-th object.
+            first: only catch the first `n` objects.
         Returns:
             An `Awaitable` object (see `thing.type`).
             Two types of usage:
@@ -361,6 +366,7 @@ class ThingClient:
                 name=name,
                 server=server,
                 every=every,
+                first=first,
             )
         )
 
