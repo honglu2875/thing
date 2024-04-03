@@ -4,8 +4,16 @@ from typing import Optional
 
 from .argument import ServicerArguments
 from .client import ThingClient as Client
-from .interactive import (describe, get, get_all, help, ingest_all, serve,
-                          status, summary)
+from .interactive import (
+    describe,
+    get,
+    get_all,
+    help,
+    ingest_all,
+    serve,
+    status,
+    summary,
+)
 from .server import Server
 from .store import HistoryRecord
 from .utils import _set_up_logger

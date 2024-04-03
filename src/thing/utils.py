@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import ctypes
+import dataclasses
 import functools
 import logging
 import re
@@ -25,8 +26,17 @@ from typing import Any, Callable, Optional
 import numpy as np
 
 from thing import thing_pb2
-from thing.type import (ArrayLike, Leaf, Object, PyTree, PyTreeObject,
-                        StringObject, TensorObject)
+from thing.type import (
+    ArrayLike,
+    Leaf,
+    Object,
+    PyTree,
+    PyTreeObject,
+    StringObject,
+    TensorObject,
+)
+from thing.array_types import ByteWithMetadata, _class_str_to_framework
+
 
 _used_hash = set()
 
@@ -70,47 +80,6 @@ def _set_up_logger(name: str):
     logger.addHandler(handler)
 
 
-_numpy_dtypes = {
-    "int8": thing_pb2.DTYPE.INT8,
-    "int16": thing_pb2.DTYPE.INT16,
-    "int32": thing_pb2.DTYPE.INT32,
-    "int64": thing_pb2.DTYPE.INT64,
-    "uint8": thing_pb2.DTYPE.UINT8,
-    "uint16": thing_pb2.DTYPE.UINT16,
-    "uint32": thing_pb2.DTYPE.UINT32,
-    "uint64": thing_pb2.DTYPE.UINT64,
-    "float16": thing_pb2.DTYPE.FLOAT16,
-    "float32": thing_pb2.DTYPE.FLOAT32,
-    "float64": thing_pb2.DTYPE.FLOAT64,
-    "bool": thing_pb2.DTYPE.BOOL,
-}
-
-_to_numpy_dtypes = {
-    thing_pb2.DTYPE.INT8: np.int8,
-    thing_pb2.DTYPE.INT16: np.int16,
-    thing_pb2.DTYPE.INT32: np.int32,
-    thing_pb2.DTYPE.INT64: np.int64,
-    thing_pb2.DTYPE.UINT8: np.uint8,
-    thing_pb2.DTYPE.UINT16: np.uint16,
-    thing_pb2.DTYPE.UINT32: np.uint32,
-    thing_pb2.DTYPE.UINT64: np.uint64,
-    thing_pb2.DTYPE.FLOAT16: np.float16,
-    thing_pb2.DTYPE.FLOAT32: np.float32,
-    thing_pb2.DTYPE.FLOAT64: np.float64,
-    thing_pb2.DTYPE.BOOL: bool,
-}
-
-# Sacrifice type-check robustness to avoid unnecessary imports
-_class_str_to_framework = {
-    # Numpy array naming should be stable enough
-    "<class 'numpy.ndarray'>": thing_pb2.FRAMEWORK.NUMPY,
-    # Torch array naming is also considered stable
-    "<class 'torch.Tensor'>": thing_pb2.FRAMEWORK.TORCH,
-    # However, I am a bit worried about JAX...
-    "<class 'jaxlib.xla_extension.ArrayImpl'>": thing_pb2.FRAMEWORK.JAX,
-}
-
-
 def _validate_server_name(
     server: str, logger: Optional[logging.Logger] = None
 ) -> str | None:
@@ -125,33 +94,12 @@ def _validate_server_name(
     return server
 
 
-def reconstruct_array(chunks: list[thing_pb2.Array]) -> ArrayLike:
-    chunks = sorted(chunks, key=lambda x: x.chunk_id)
-
-    # TODO: is there a way to avoid copying the data?
-    data = b"".join([chunk.data for chunk in chunks])
-    arr = np.frombuffer(data, dtype=_to_numpy_dtypes[chunks[0].dtype]).reshape(
-        chunks[0].shape
-    )
-
-    if chunks[0].framework == thing_pb2.FRAMEWORK.JAX:
-        import jax.numpy as jnp
-
-        arr = jnp.array(arr)
-    elif chunks[0].framework == thing_pb2.FRAMEWORK.TORCH:
-        import torch
-
-        arr = torch.tensor(arr)
-
-    return arr
-
-
 def reconstruct_tensor_object(
     chunks: list[thing_pb2.Array],
     client_addr: str = "unknown",
     timestamp: int = 0,
 ) -> TensorObject:
-    array = reconstruct_array(chunks)
+    array = ByteWithMetadata.from_proto(chunks).get_array()
     return TensorObject.from_proto(
         chunks[0], array, client_addr=client_addr, timestamp=timestamp
     )
@@ -190,19 +138,6 @@ def _is_tensor(obj) -> bool:
     return False
 
 
-def _get_framework(obj) -> thing_pb2.FRAMEWORK:
-    if isinstance(obj, Number):
-        return thing_pb2.FRAMEWORK.NUMPY
-    return _class_str_to_framework[str(obj.__class__)]
-
-
-def _get_size(obj: ArrayLike) -> int:
-    """A framework-agnostic way of getting the total size of an array."""
-    if isinstance(obj, Number):
-        return sys.getsizeof(obj)
-    return obj.nbytes
-
-
 def _get_node_type(obj) -> int:
     if isinstance(obj, tuple):
         return thing_pb2.NODE_TYPE.TUPLE
@@ -218,28 +153,12 @@ def _get_node_type(obj) -> int:
         raise TypeError(f"Unsupported type {type(obj)}")
 
 
-def _to_numpy_no_copy(obj: Any, framework: thing_pb2.FRAMEWORK) -> np.ndarray:
-    """Convert tensor of any framework to numpy array without copying."""
-    if framework == thing_pb2.FRAMEWORK.TORCH:
-        return obj.detach().cpu().numpy(force=False)  # force=False to avoid a copy
-    elif framework == thing_pb2.FRAMEWORK.JAX:
-        return np.array(obj, copy=False)
-    else:
-        return np.array(obj)
-
-
-def _to_bytes_no_copy(array: np.ndarray) -> bytes:
-    """Convert numpy array to bytes without copying."""
-    # Use ctypes instead of `array.tobytes()` to avoid creating a copy
-    return (ctypes.c_char * array.nbytes).from_address(array.ctypes.data).raw
-
-
 def _is_small(obj: Leaf) -> bool:
     """Deciding whether the leaf object is small enough so that we do not create
     a separate request."""
     if isinstance(obj, str) and sys.getsizeof(obj) <= 256:
         return True
-    if _is_tensor(obj) and _get_size(obj) <= 256:
+    if _is_tensor(obj) and ByteWithMetadata._get_size(obj) <= 256:
         return True
     return False
 
@@ -264,22 +183,26 @@ def _prepare_array(
 ) -> thing_pb2.Array:
     if isinstance(obj, bytes):
         # obj is already ready to be sent
-        assert all(p is not None for p in [shape, dtype, framework])
+        if not all(p is not None for p in [shape, dtype, framework]):
+            raise ValueError(
+                "When the input are bytes, all of shape, dtype, framework must be given."
+            )
+        data = obj
     else:
         # shape, dtype, framework need to be determined,
         # and obj needs to be converted to bytes
-        framework = _get_framework(obj)
-        obj = _to_numpy_no_copy(obj, framework)
-        shape = obj.shape
-        dtype = _numpy_dtypes[obj.dtype.name]
-        obj = _to_bytes_no_copy(obj)
+        byte_obj = ByteWithMetadata.from_array(obj)
+        framework = byte_obj.framework
+        data = byte_obj.data
+        shape = byte_obj.shape
+        dtype = byte_obj.dtype
     return thing_pb2.Array(
         id=idx or get_rand_id(),
         var_name=name,
         shape=shape,
         dtype=dtype,
         framework=framework,
-        data=obj,
+        data=data,
         chunk_id=chunk_id,
         num_chunks=num_chunks,
     )

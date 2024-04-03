@@ -26,10 +26,15 @@ import numpy as np
 
 from thing import thing_pb2, thing_pb2_grpc
 from thing.type import ArrayLike, Awaitable
-from thing.utils import (_get_framework, _is_tensor, _numpy_dtypes,
-                         _prepare_array, _prepare_pytree_obj, _prepare_string,
-                         _to_bytes_no_copy, _to_numpy_no_copy,
-                         _validate_server_name, get_rand_id)
+from thing.utils import (
+    _is_tensor,
+    _prepare_array,
+    _prepare_pytree_obj,
+    _prepare_string,
+    _validate_server_name,
+    get_rand_id,
+)
+from thing.array_types import ByteWithMetadata
 
 
 class ThingClient:
@@ -151,16 +156,11 @@ class ThingClient:
         It only receives a numpy array (already converted from torch or jax),
         and sends it to the server in bytes and in chunks without creating copies.
         """
-        framework = _get_framework(array)
-        array = _to_numpy_no_copy(array, framework)
-
-        if array.dtype.name in _numpy_dtypes:
-            dtype = _numpy_dtypes[array.dtype.name]
-        else:
-            self._logger.error(f"Unsupported dtype {array.dtype}")
-            return False
-
-        data = _to_bytes_no_copy(array)
+        byte_obj = ByteWithMetadata.from_array(array)
+        framework = byte_obj.framework
+        shape = byte_obj.shape
+        dtype = byte_obj.dtype
+        data = byte_obj.data
 
         try:
             with self._set_channel_stub(server) as stub:
@@ -169,7 +169,7 @@ class ThingClient:
                 for i in range(0, len(data), self._chunk_size):
                     self._logger.info(
                         f"Sending tensor {name or '<noname>'} of shape {array.shape} and "
-                        f"type {array.dtype.name}. "
+                        f"type {str(array.dtype)}. "
                         f"Chunk {i // self._chunk_size} of {len(data) // self._chunk_size}."
                     )
                     response = stub.CatchArray(
@@ -177,7 +177,7 @@ class ThingClient:
                             data[i : i + self._chunk_size],
                             idx=idx,
                             name=name,
-                            shape=array.shape,
+                            shape=shape,
                             dtype=dtype,
                             framework=framework,
                             chunk_id=None if singleton else i // self._chunk_size,

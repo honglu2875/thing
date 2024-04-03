@@ -21,12 +21,6 @@ from typing import Any, Optional, Union
 from thing import thing_pb2
 
 
-class FRAMEWORK(Enum):
-    NUMPY = 0
-    TORCH = 1
-    JAX = 2
-
-
 ArrayLike = Union["np.ndarray", "torch.Tensor", "jaxlib.xla_extension.ArrayImpl"]
 Leaf = Optional[Union[ArrayLike, str, Number]]
 PyTree = Union[tuple, list, dict, Leaf]

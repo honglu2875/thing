@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import torch
 
-from thing.utils import _get_size
+from thing.array_types import ByteWithMetadata
 
 
 @pytest.mark.parametrize(
@@ -15,5 +15,5 @@ from thing.utils import _get_size
     ),
 )
 def test_get_size(obj):
-    s = _get_size(obj)
+    s = ByteWithMetadata._get_size(obj)
     assert s == 16

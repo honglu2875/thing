@@ -15,18 +15,19 @@ syntax = "proto3";
 package thing;
 
 enum DTYPE {
-  INT8 = 0;  // np.int8
-  INT16 = 1;  // np.int16
-  INT32 = 2;  // np.int32
-  INT64 = 3;  // np.int64
-  UINT8 = 4;  // np.uint8
+  INT8 = 0;  // np.int8, torch.int8
+  INT16 = 1;  // np.int16, torch.int16
+  INT32 = 2;  // np.int32, torch.int32
+  INT64 = 3;  // np.int64, torch.int64
+  UINT8 = 4;  // np.uint8, torch.uint8
   UINT16 = 5;  // np.uint16
   UINT32 = 6;  // np.uint32
   UINT64 = 7;  // np.uint64
-  FLOAT16 = 8;  // np.float16
-  FLOAT32 = 9;  // np.float32
-  FLOAT64 = 10;  // np.float64
-  BOOL = 11;  // built-in bool
+  FLOAT16 = 8;  // np.float16, torch.float16
+  BFLOAT16 = 9;  // torch.bfloat16
+  FLOAT32 = 10;  // np.float32, torch.float32
+  FLOAT64 = 11;  // np.float64, torch.float64
+  BOOL = 12;  // built-in bool, torch.bool
 }
 
 enum FRAMEWORK {

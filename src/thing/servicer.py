@@ -22,8 +22,11 @@ import grpc
 
 from thing import thing_pb2, thing_pb2_grpc
 from thing.type import PyTreeObject, StringObject, TensorObject
-from thing.utils import (reconstruct_pytree_object, reconstruct_string_object,
-                         reconstruct_tensor_object)
+from thing.utils import (
+    reconstruct_pytree_object,
+    reconstruct_string_object,
+    reconstruct_tensor_object,
+)
 
 _exit = object()  # a sentinel object to indicate the end of the queue
 

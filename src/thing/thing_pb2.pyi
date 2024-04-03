@@ -2,7 +2,13 @@ from google.protobuf.internal import containers as _containers
 from google.protobuf.internal import enum_type_wrapper as _enum_type_wrapper
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import message as _message
-from typing import ClassVar as _ClassVar, Iterable as _Iterable, Mapping as _Mapping, Optional as _Optional, Union as _Union
+from typing import (
+    ClassVar as _ClassVar,
+    Iterable as _Iterable,
+    Mapping as _Mapping,
+    Optional as _Optional,
+    Union as _Union,
+)
 
 DESCRIPTOR: _descriptor.FileDescriptor
 
@@ -17,6 +23,7 @@ class DTYPE(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     UINT32: _ClassVar[DTYPE]
     UINT64: _ClassVar[DTYPE]
     FLOAT16: _ClassVar[DTYPE]
+    BFLOAT16: _ClassVar[DTYPE]
     FLOAT32: _ClassVar[DTYPE]
     FLOAT64: _ClassVar[DTYPE]
     BOOL: _ClassVar[DTYPE]
@@ -40,6 +47,7 @@ class NODE_TYPE(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     TENSOR: _ClassVar[NODE_TYPE]
     STRING: _ClassVar[NODE_TYPE]
     NONE: _ClassVar[NODE_TYPE]
+
 INT8: DTYPE
 INT16: DTYPE
 INT32: DTYPE
@@ -49,6 +57,7 @@ UINT16: DTYPE
 UINT32: DTYPE
 UINT64: DTYPE
 FLOAT16: DTYPE
+BFLOAT16: DTYPE
 FLOAT32: DTYPE
 FLOAT64: DTYPE
 BOOL: DTYPE
@@ -65,7 +74,16 @@ STRING: NODE_TYPE
 NONE: NODE_TYPE
 
 class Array(_message.Message):
-    __slots__ = ("id", "shape", "var_name", "dtype", "framework", "data", "chunk_id", "num_chunks")
+    __slots__ = (
+        "id",
+        "shape",
+        "var_name",
+        "dtype",
+        "framework",
+        "data",
+        "chunk_id",
+        "num_chunks",
+    )
     ID_FIELD_NUMBER: _ClassVar[int]
     SHAPE_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
@@ -82,7 +100,17 @@ class Array(_message.Message):
     data: bytes
     chunk_id: int
     num_chunks: int
-    def __init__(self, id: _Optional[int] = ..., shape: _Optional[_Iterable[int]] = ..., var_name: _Optional[str] = ..., dtype: _Optional[_Union[DTYPE, str]] = ..., framework: _Optional[_Union[FRAMEWORK, str]] = ..., data: _Optional[bytes] = ..., chunk_id: _Optional[int] = ..., num_chunks: _Optional[int] = ...) -> None: ...
+    def __init__(
+        self,
+        id: _Optional[int] = ...,
+        shape: _Optional[_Iterable[int]] = ...,
+        var_name: _Optional[str] = ...,
+        dtype: _Optional[_Union[DTYPE, str]] = ...,
+        framework: _Optional[_Union[FRAMEWORK, str]] = ...,
+        data: _Optional[bytes] = ...,
+        chunk_id: _Optional[int] = ...,
+        num_chunks: _Optional[int] = ...,
+    ) -> None: ...
 
 class String(_message.Message):
     __slots__ = ("id", "var_name", "data")
@@ -92,10 +120,24 @@ class String(_message.Message):
     id: int
     var_name: str
     data: str
-    def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., data: _Optional[str] = ...) -> None: ...
+    def __init__(
+        self,
+        id: _Optional[int] = ...,
+        var_name: _Optional[str] = ...,
+        data: _Optional[str] = ...,
+    ) -> None: ...
 
 class PyTreeNode(_message.Message):
-    __slots__ = ("id", "var_name", "node_type", "children", "key", "object_id", "string", "array")
+    __slots__ = (
+        "id",
+        "var_name",
+        "node_type",
+        "children",
+        "key",
+        "object_id",
+        "string",
+        "array",
+    )
     ID_FIELD_NUMBER: _ClassVar[int]
     VAR_NAME_FIELD_NUMBER: _ClassVar[int]
     NODE_TYPE_FIELD_NUMBER: _ClassVar[int]
@@ -112,7 +154,17 @@ class PyTreeNode(_message.Message):
     object_id: int
     string: String
     array: Array
-    def __init__(self, id: _Optional[int] = ..., var_name: _Optional[str] = ..., node_type: _Optional[_Union[NODE_TYPE, str]] = ..., children: _Optional[_Iterable[_Union[PyTreeNode, _Mapping]]] = ..., key: _Optional[str] = ..., object_id: _Optional[int] = ..., string: _Optional[_Union[String, _Mapping]] = ..., array: _Optional[_Union[Array, _Mapping]] = ...) -> None: ...
+    def __init__(
+        self,
+        id: _Optional[int] = ...,
+        var_name: _Optional[str] = ...,
+        node_type: _Optional[_Union[NODE_TYPE, str]] = ...,
+        children: _Optional[_Iterable[_Union[PyTreeNode, _Mapping]]] = ...,
+        key: _Optional[str] = ...,
+        object_id: _Optional[int] = ...,
+        string: _Optional[_Union[String, _Mapping]] = ...,
+        array: _Optional[_Union[Array, _Mapping]] = ...,
+    ) -> None: ...
 
 class Byte(_message.Message):
     __slots__ = ("data",)
